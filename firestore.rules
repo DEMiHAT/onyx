@@ -1,0 +1,346 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ════════════════════════════════════════════════════════════
+    // HELPER FUNCTIONS
+    // ════════════════════════════════════════════════════════════
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function hasRole(role) {
+      return isAuthenticated() && getUserRole() == role;
+    }
+
+    function hasAnyRole(roles) {
+      return isAuthenticated() && getUserRole() in roles;
+    }
+
+    function isStaff() {
+      return hasAnyRole(['coach', 'receptionist', 'facilityManager', 'admin']);
+    }
+
+    function isAdmin() {
+      return hasRole('admin');
+    }
+
+    function isCoach() {
+      return hasAnyRole(['coach', 'admin']);
+    }
+
+    function isFrontDesk() {
+      return hasAnyRole(['receptionist', 'facilityManager', 'admin']);
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // USERS
+    // ════════════════════════════════════════════════════════════
+
+    match /users/{userId} {
+      // Anyone authenticated can read their own profile
+      // Staff can read all profiles
+      allow read: if isOwner(userId) || isStaff();
+
+      // Users can update their own non-role fields
+      allow update: if isOwner(userId)
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'createdAt']);
+
+      // Only admin can create users or change roles
+      allow create: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // FACILITIES
+    // ════════════════════════════════════════════════════════════
+
+    match /facilities/{facilityId} {
+      // All authenticated users can read facility status
+      allow read: if isAuthenticated();
+
+      // Only staff can modify facility data
+      allow write: if isStaff();
+
+      // Facility timeline sub-collection
+      match /timeline/{entryId} {
+        allow read: if isAuthenticated();
+        allow write: if isStaff();
+      }
+
+      // Time slots sub-collection
+      match /slots/{slotId} {
+        allow read: if isAuthenticated();
+        allow write: if isStaff();
+      }
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // BOOKINGS
+    // ════════════════════════════════════════════════════════════
+
+    match /bookings/{bookingId} {
+      // Users can read their own bookings; staff can read all
+      allow read: if isAuthenticated()
+        && (resource.data.userId == request.auth.uid || isStaff());
+
+      // Authenticated users can create bookings for themselves
+      allow create: if isAuthenticated()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'upcoming';
+
+      // Users can cancel their own bookings; staff can update any
+      allow update: if isAuthenticated()
+        && (resource.data.userId == request.auth.uid || isStaff());
+
+      // Only admin can hard-delete bookings
+      allow delete: if isAdmin();
+    }
+
+    // Walk-in bookings (created by staff for walk-in guests)
+    match /walkinBookings/{bookingId} {
+      allow read, write: if isFrontDesk();
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // QUEUE
+    // ════════════════════════════════════════════════════════════
+
+    match /queues/{facilityId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+
+      match /entries/{entryId} {
+        allow read: if isAuthenticated();
+
+        // Users can join/leave queue for themselves
+        allow create: if isAuthenticated()
+          && request.resource.data.userId == request.auth.uid;
+
+        allow update, delete: if isAuthenticated()
+          && (resource.data.userId == request.auth.uid || isStaff());
+      }
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // COACHING
+    // ════════════════════════════════════════════════════════════
+
+    // Batches
+    match /batches/{batchId} {
+      // Coaches and students in the batch can read
+      allow read: if isAuthenticated()
+        && (isCoach() || request.auth.uid in resource.data.studentIds);
+
+      // Only coaches and admin can manage batches
+      allow write: if isCoach();
+
+      // Attendance sub-collection
+      match /attendance/{sessionId} {
+        allow read: if isAuthenticated()
+          && (isCoach() || request.auth.uid in get(/databases/$(database)/documents/batches/$(batchId)).data.studentIds);
+
+        // Only coach marks attendance
+        allow write: if isCoach();
+      }
+    }
+
+    // Coaching sessions
+    match /coachingSessions/{sessionId} {
+      allow read: if isAuthenticated()
+        && (isCoach() || resource.data.studentIds.hasAny([request.auth.uid]));
+
+      allow create, update: if isCoach();
+      allow delete: if isAdmin();
+    }
+
+    // Session cancellations
+    match /sessionCancellations/{cancellationId} {
+      allow read: if isAuthenticated();
+      allow create: if isCoach();
+      allow update, delete: if isAdmin();
+    }
+
+    // Student biodata (extended profile for coaching students)
+    match /studentProfiles/{userId} {
+      allow read: if isOwner(userId) || isCoach();
+      allow create, update: if isCoach() || isOwner(userId);
+      allow delete: if isAdmin();
+    }
+
+    // Coach notes per student
+    match /coachNotes/{noteId} {
+      allow read: if isAuthenticated()
+        && (isCoach() || resource.data.studentId == request.auth.uid);
+      allow write: if isCoach();
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // ANNOUNCEMENTS & NUDGES
+    // ════════════════════════════════════════════════════════════
+
+    match /announcements/{announcementId} {
+      // All authenticated users can read announcements
+      allow read: if isAuthenticated();
+
+      // Coaches and admin can create/edit announcements
+      allow create: if isCoach();
+      allow update: if isCoach() && resource.data.authorId == request.auth.uid;
+      allow delete: if isAdmin() || (isCoach() && resource.data.authorId == request.auth.uid);
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // TOURNAMENTS
+    // ════════════════════════════════════════════════════════════
+
+    match /tournaments/{tournamentId} {
+      allow read: if isAuthenticated();
+
+      // Only admin and tournament organizers can manage
+      allow write: if hasAnyRole(['admin', 'tournamentOrganizer']);
+
+      // Registrations sub-collection
+      match /registrations/{regId} {
+        allow read: if isAuthenticated();
+
+        // Users can register themselves
+        allow create: if isAuthenticated()
+          && request.resource.data.userId == request.auth.uid;
+
+        // Users can cancel their registration; admin can manage all
+        allow update, delete: if isAuthenticated()
+          && (resource.data.userId == request.auth.uid || isAdmin());
+      }
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // COMMUNITY — Open Play & Player Matching
+    // ════════════════════════════════════════════════════════════
+
+    match /openPlayRequests/{requestId} {
+      allow read: if isAuthenticated();
+
+      // Any authenticated user can create
+      allow create: if isAuthenticated()
+        && request.resource.data.creatorId == request.auth.uid;
+
+      // Creator or admin can modify
+      allow update: if isAuthenticated()
+        && (resource.data.creatorId == request.auth.uid || isAdmin());
+
+      allow delete: if isAuthenticated()
+        && (resource.data.creatorId == request.auth.uid || isAdmin());
+
+      // Join requests
+      match /participants/{participantId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated() && participantId == request.auth.uid;
+        allow delete: if isAuthenticated()
+          && (participantId == request.auth.uid || isAdmin());
+      }
+    }
+
+    // Activity feed
+    match /activityFeed/{postId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated()
+        && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAuthenticated()
+        && (resource.data.userId == request.auth.uid || isAdmin());
+
+      match /likes/{likeId} {
+        allow read: if isAuthenticated();
+        allow create, delete: if isAuthenticated() && likeId == request.auth.uid;
+      }
+
+      match /comments/{commentId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated()
+          && request.resource.data.userId == request.auth.uid;
+        allow delete: if isAuthenticated()
+          && (resource.data.userId == request.auth.uid || isAdmin());
+      }
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // PAYMENTS
+    // ════════════════════════════════════════════════════════════
+
+    match /payments/{paymentId} {
+      // Users can read their own; staff can read all
+      allow read: if isAuthenticated()
+        && (resource.data.userId == request.auth.uid || isStaff());
+
+      // Created server-side via Cloud Functions
+      allow create: if isStaff();
+      allow update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+    // Membership subscriptions
+    match /memberships/{userId} {
+      allow read: if isOwner(userId) || isStaff();
+      allow write: if isStaff();
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // NOTIFICATIONS
+    // ════════════════════════════════════════════════════════════
+
+    match /notifications/{notifId} {
+      // Users can read their own notifications
+      allow read: if isAuthenticated()
+        && resource.data.userId == request.auth.uid;
+
+      // Users can mark their own as read
+      allow update: if isAuthenticated()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead']);
+
+      // Only server (functions) or admin creates notifications
+      allow create: if isStaff();
+      allow delete: if isAuthenticated()
+        && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // LEADERBOARD (aggregated — read-only for clients)
+    // ════════════════════════════════════════════════════════════
+
+    match /leaderboard/{entryId} {
+      allow read: if isAuthenticated();
+      // Only written by Cloud Functions
+      allow write: if false;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // HOUSEKEEPING
+    // ════════════════════════════════════════════════════════════
+
+    match /housekeepingTasks/{taskId} {
+      allow read: if hasAnyRole(['housekeeping', 'facilityManager', 'admin']);
+      allow create: if hasAnyRole(['facilityManager', 'admin']);
+      allow update: if hasAnyRole(['housekeeping', 'facilityManager', 'admin']);
+      allow delete: if isAdmin();
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // APP CONFIG (pricing, hours, etc.)
+    // ════════════════════════════════════════════════════════════
+
+    match /config/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+  }
+}
