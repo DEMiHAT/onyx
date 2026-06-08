@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/services/auth_service.dart';
+import '../../core/widgets/onyx_toast.dart';
 import '../../models/models.dart';
 import '../../app.dart';
 
@@ -91,13 +92,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     if (error != null) {
       setState(() => _error = error);
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Password reset email sent to $email'),
-          backgroundColor: AppColors.success,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      OnyxToast.success(context, 'Password reset email sent to $email');
     }
   }
 

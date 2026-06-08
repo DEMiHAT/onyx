@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/section_header.dart';
+import '../../core/widgets/onyx_toast.dart';
 import '../bookings/booking_qr_screen.dart';
 
 /// Walk-In Booking Screen — For staff to register walk-in guests.
@@ -220,8 +221,7 @@ class _WalkInBookingScreenState extends State<WalkInBookingScreen> {
         'bookingId': bookingId,
       });
 
-      if (!mounted) return;
-      Navigator.pop(context); // dismiss loading
+      OnyxToast.success(context, 'Walk-in registered! Show QR to check in');
 
       // Navigate to QR screen (skip Razorpay for walk-ins)
       Navigator.push(context, MaterialPageRoute(
@@ -238,9 +238,7 @@ class _WalkInBookingScreenState extends State<WalkInBookingScreen> {
     } catch (e) {
       if (!mounted) return;
       Navigator.pop(context); // dismiss loading
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error),
-      );
+      OnyxToast.error(context, e);
     }
   }
 }

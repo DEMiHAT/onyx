@@ -15,7 +15,7 @@ enum MembershipStatus { active, expired, expiringSoon }
 enum NotificationType { booking, facility, membership, tournament, coaching, matchFound, general }
 enum PlayFormat { singles, doubles }
 enum SportType { badminton, cricket }
-enum UserRole { guest, coachingMember, coach, receptionist, facilityManager, admin, tournamentOrganizer, housekeeping }
+enum UserRole { guest, member, coachingMember, coach, receptionist, facilityManager, admin, tournamentOrganizer, housekeeping }
 
 // ── Facility ───────────────────────────────────────────────────
 
@@ -37,6 +37,35 @@ class Facility {
     this.timeRemainingMinutes,
     this.nextAvailableTime, this.bookingEndTime,
   });
+
+  factory Facility.fromFirestore(Map<String, dynamic> data, String id) {
+    return Facility(
+      id: id,
+      name: data['name'] ?? '',
+      shortName: data['shortName'] ?? '',
+      type: _parseFacilityType(data['type']),
+      status: _parseFacilityStatus(data['status']),
+      currentUser: data['currentUser'],
+      timeRemainingMinutes: data['timeRemainingMinutes'],
+      nextAvailableTime: data['nextAvailableTime'],
+      bookingEndTime: data['bookingEndTime'],
+    );
+  }
+
+  static FacilityType _parseFacilityType(String? s) => switch (s) {
+    'badmintonCourt' => FacilityType.badmintonCourt,
+    'cricketTurf' => FacilityType.cricketTurf,
+    'cricketNets' => FacilityType.cricketNets,
+    _ => FacilityType.badmintonCourt,
+  };
+
+  static FacilityStatus _parseFacilityStatus(String? s) => switch (s) {
+    'available' => FacilityStatus.available,
+    'occupied' => FacilityStatus.occupied,
+    'maintenance' => FacilityStatus.maintenance,
+    'reserved' => FacilityStatus.reserved,
+    _ => FacilityStatus.available,
+  };
 }
 
 // ── Booking ────────────────────────────────────────────────────
@@ -44,6 +73,7 @@ class Facility {
 class Booking {
   final String id;
   final String facilityName;
+  final String? facilityId;
   final FacilityType facilityType;
   final String date;
   final String timeSlot;
@@ -51,12 +81,58 @@ class Booking {
   final String? courtNumber;
   final int durationMinutes;
   final double? amount;
+  final String? checkInToken;
+  final String? paymentStatus;
+  final String? paymentMode;
 
   const Booking({
-    required this.id, required this.facilityName, required this.facilityType,
-    required this.date, required this.timeSlot, required this.status,
-    this.courtNumber, this.durationMinutes = 60, this.amount,
+    required this.id, required this.facilityName, this.facilityId,
+    required this.facilityType, required this.date, required this.timeSlot,
+    required this.status, this.courtNumber, this.durationMinutes = 60,
+    this.amount, this.checkInToken, this.paymentStatus, this.paymentMode,
   });
+
+  factory Booking.fromFirestore(Map<String, dynamic> data, String id) {
+    final facilityId = data['facilityId'] ?? '';
+    return Booking(
+      id: id,
+      facilityId: facilityId,
+      facilityName: data['courtNumber'] ?? _facilityLabel(facilityId),
+      facilityType: _typeFromId(facilityId),
+      date: data['date'] ?? '',
+      timeSlot: '${data['startTime'] ?? ''} — ${data['endTime'] ?? ''}',
+      status: _parseStatus(data['status']),
+      courtNumber: data['courtNumber'],
+      durationMinutes: data['durationMinutes'] ?? 60,
+      amount: (data['amount'] ?? 0).toDouble(),
+      checkInToken: data['checkInToken'],
+      paymentStatus: data['paymentStatus'],
+      paymentMode: data['paymentMode'],
+    );
+  }
+
+  static BookingStatus _parseStatus(String? s) => switch (s) {
+    'upcoming' => BookingStatus.upcoming,
+    'active' => BookingStatus.active,
+    'completed' => BookingStatus.completed,
+    'cancelled' => BookingStatus.cancelled,
+    _ => BookingStatus.upcoming,
+  };
+
+  static FacilityType _typeFromId(String id) {
+    if (id.startsWith('court')) return FacilityType.badmintonCourt;
+    if (id == 'turf') return FacilityType.cricketTurf;
+    return FacilityType.cricketNets;
+  }
+
+  static String _facilityLabel(String id) {
+    if (id == 'court-1') return 'Court 1';
+    if (id == 'court-2') return 'Court 2';
+    if (id == 'court-3') return 'Court 3';
+    if (id == 'turf') return 'Cricket Turf';
+    if (id == 'nets') return 'Cricket Nets';
+    return id;
+  }
 }
 
 // ── TimeSlot ───────────────────────────────────────────────────

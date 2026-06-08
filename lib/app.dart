@@ -63,6 +63,15 @@ class _OnyxShellState extends State<OnyxShell> {
       _TabConfig(icon: Icons.person_outline_rounded, label: 'Profile', screen: ProfileScreen(role: widget.role)),
     ],
 
+    // ── Member (same as Guest) ───────────────────────────
+    UserRole.member => [
+      const _TabConfig(icon: Icons.dashboard_rounded, label: 'Home', screen: GuestHomeScreen()),
+      const _TabConfig(icon: Icons.calendar_today_rounded, label: 'Bookings', screen: BookingsScreen()),
+      const _TabConfig(icon: Icons.people_outline_rounded, label: 'Community', screen: CommunityScreen()),
+      const _TabConfig(icon: Icons.leaderboard_outlined, label: 'Leaderboard', screen: LeaderboardScreen()),
+      _TabConfig(icon: Icons.person_outline_rounded, label: 'Profile', screen: ProfileScreen(role: widget.role)),
+    ],
+
     // ── Coaching Member ──────────────────────────────────
     UserRole.coachingMember => [
       const _TabConfig(icon: Icons.dashboard_rounded, label: 'Home', screen: StudentHomeScreen()),

@@ -4,11 +4,13 @@ import 'package:uuid/uuid.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/section_header.dart';
+import '../../core/widgets/onyx_toast.dart';
+import '../../core/services/booking_service.dart';
 import '../../core/services/payment_service.dart';
 import '../../models/models.dart';
 import 'booking_qr_screen.dart';
 
-/// Cricket Turf Booking Screen — Multi-hour selection with pricing.
+/// Cricket Turf Booking Screen — Live Firestore slots.
 class TurfBookingScreen extends StatefulWidget {
   const TurfBookingScreen({super.key});
 
@@ -20,27 +22,60 @@ class _TurfBookingScreenState extends State<TurfBookingScreen> {
   int _selectedDateIndex = 0;
   final Set<int> _selectedSlots = {};
 
-  final List<String> _dates = ['Today', 'Tomorrow', 'Jun 8', 'Jun 9', 'Jun 10'];
+  List<TimeSlot> _slots = [];
+  bool _loadingSlots = true;
+  Facility? _turf;
 
-  final List<TimeSlot> _slots = const [
-    TimeSlot(time: '06:00', isAvailable: true, price: 1000),
-    TimeSlot(time: '07:00', isAvailable: false, price: 1200, isPeak: true),
-    TimeSlot(time: '08:00', isAvailable: true, price: 1200, isPeak: true),
-    TimeSlot(time: '09:00', isAvailable: true, price: 1000),
-    TimeSlot(time: '10:00', isAvailable: true, price: 1000),
-    TimeSlot(time: '16:00', isAvailable: true, price: 1200, isPeak: true),
-    TimeSlot(time: '17:00', isAvailable: true, price: 1500, isPeak: true),
-    TimeSlot(time: '18:00', isAvailable: false, price: 1500, isPeak: true),
-    TimeSlot(time: '19:00', isAvailable: true, price: 1500, isPeak: true),
-    TimeSlot(time: '20:00', isAvailable: true, price: 1200),
-    TimeSlot(time: '21:00', isAvailable: true, price: 1000),
-  ];
+  final List<String> _dates = _generateDates();
+
+  static List<String> _generateDates() {
+    final now = DateTime.now();
+    return List.generate(7, (i) {
+      final d = now.add(Duration(days: i));
+      if (i == 0) return 'Today';
+      if (i == 1) return 'Tomorrow';
+      return '${d.day}/${d.month}/${d.year}';
+    });
+  }
+
+  String _dateForQuery(int index) {
+    final now = DateTime.now();
+    final d = now.add(Duration(days: index));
+    return '${d.day}/${d.month}/${d.year}';
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFacility();
+  }
+
+  Future<void> _loadFacility() async {
+    BookingService.instance.getFacilitiesByType(FacilityType.cricketTurf).listen((list) {
+      if (mounted && list.isNotEmpty) {
+        setState(() => _turf = list.first);
+      }
+    });
+    _loadSlots();
+  }
+
+  Future<void> _loadSlots() async {
+    setState(() => _loadingSlots = true);
+    try {
+      final slots = await BookingService.instance.getAvailableSlots(
+        facilityId: 'turf', date: _dateForQuery(_selectedDateIndex),
+      );
+      if (mounted) setState(() { _slots = slots; _loadingSlots = false; });
+    } catch (e) {
+      if (mounted) { setState(() => _loadingSlots = false); OnyxToast.error(context, e); }
+    }
+  }
 
   double get _totalPrice => _selectedSlots.fold(0.0, (sum, i) => sum + (_slots[i].price ?? 0));
   int get _totalHours => _selectedSlots.length;
 
   String get _timeRange {
-    if (_selectedSlots.isEmpty) return '';
+    if (_selectedSlots.isEmpty || _slots.isEmpty) return '';
     final sorted = _selectedSlots.toList()..sort();
     final first = _slots[sorted.first].time;
     final lastHour = int.parse(_slots[sorted.last].time.split(':')[0]) + 1;
@@ -49,6 +84,11 @@ class _TurfBookingScreenState extends State<TurfBookingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final statusText = _turf?.status == FacilityStatus.available ? 'Available' :
+                        _turf?.status == FacilityStatus.maintenance ? 'Maintenance' : 'In Use';
+    final statusColor = _turf?.status == FacilityStatus.available ? AppColors.success :
+                        _turf?.status == FacilityStatus.maintenance ? AppColors.error : AppColors.warning;
+
     return Scaffold(
       appBar: AppBar(title: Text('Book Cricket Turf', style: AppTypography.titleLarge)),
       body: Column(
@@ -76,8 +116,8 @@ class _TurfBookingScreenState extends State<TurfBookingScreen> {
                       ])),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(color: AppColors.success.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
-                        child: Text('Available', style: AppTypography.labelSmall.copyWith(color: AppColors.success)),
+                        decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
+                        child: Text(statusText, style: AppTypography.labelSmall.copyWith(color: statusColor)),
                       ),
                     ]),
                   ),
@@ -96,7 +136,7 @@ class _TurfBookingScreenState extends State<TurfBookingScreen> {
                       itemBuilder: (context, index) {
                         final isSelected = _selectedDateIndex == index;
                         return GestureDetector(
-                          onTap: () => setState(() { _selectedDateIndex = index; _selectedSlots.clear(); }),
+                          onTap: () { setState(() { _selectedDateIndex = index; _selectedSlots.clear(); }); _loadSlots(); },
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                             decoration: BoxDecoration(
@@ -112,7 +152,6 @@ class _TurfBookingScreenState extends State<TurfBookingScreen> {
                   ),
                 ),
 
-                // ── Info ─────────────────────────────────────────
                 SliverToBoxAdapter(
                   child: Container(
                     margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
@@ -128,47 +167,52 @@ class _TurfBookingScreenState extends State<TurfBookingScreen> {
 
                 // ── Time Slots ───────────────────────────────────
                 const SliverToBoxAdapter(child: SectionHeader(title: 'Available Slots', padding: EdgeInsets.fromLTRB(16, 16, 16, 8))),
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.border))),
-                      child: Row(children: [
-                        Expanded(flex: 2, child: Text('TIME', style: AppTypography.overline)),
-                        Expanded(flex: 2, child: Text('PRICE/HR', style: AppTypography.overline, textAlign: TextAlign.center)),
-                        Expanded(flex: 1, child: Text('TYPE', style: AppTypography.overline, textAlign: TextAlign.center)),
-                        const SizedBox(width: 50),
-                      ]),
+
+                if (_loadingSlots)
+                  const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator(color: AppColors.accent))))
+                else ...[
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.border))),
+                        child: Row(children: [
+                          Expanded(flex: 2, child: Text('TIME', style: AppTypography.overline)),
+                          Expanded(flex: 2, child: Text('PRICE/HR', style: AppTypography.overline, textAlign: TextAlign.center)),
+                          Expanded(flex: 1, child: Text('TYPE', style: AppTypography.overline, textAlign: TextAlign.center)),
+                          const SizedBox(width: 50),
+                        ]),
+                      ),
                     ),
                   ),
-                ),
-                SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      final slot = _slots[index];
-                      final isSelected = _selectedSlots.contains(index);
-                      return GestureDetector(
-                        onTap: slot.isAvailable ? () => setState(() => _selectedSlots.contains(index) ? _selectedSlots.remove(index) : _selectedSlots.add(index)) : null,
-                        child: Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 16),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: isSelected ? AppColors.accentSubtle : !slot.isAvailable ? AppColors.background : Colors.transparent,
-                            border: Border(bottom: BorderSide(color: AppColors.border.withValues(alpha: 0.5))),
+                  SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        final slot = _slots[index];
+                        final isSelected = _selectedSlots.contains(index);
+                        return GestureDetector(
+                          onTap: slot.isAvailable ? () => setState(() => _selectedSlots.contains(index) ? _selectedSlots.remove(index) : _selectedSlots.add(index)) : null,
+                          child: Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 16),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: isSelected ? AppColors.accentSubtle : !slot.isAvailable ? AppColors.background : Colors.transparent,
+                              border: Border(bottom: BorderSide(color: AppColors.border.withValues(alpha: 0.5))),
+                            ),
+                            child: Row(children: [
+                              Expanded(flex: 2, child: Text(slot.time, style: AppTypography.mono.copyWith(color: slot.isAvailable ? AppColors.textPrimary : AppColors.textDisabled))),
+                              Expanded(flex: 2, child: Text('₹${slot.price?.toInt() ?? 0}', style: AppTypography.mono.copyWith(color: slot.isAvailable ? AppColors.textSecondary : AppColors.textDisabled), textAlign: TextAlign.center)),
+                              Expanded(flex: 1, child: slot.isPeak ? Container(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1), decoration: BoxDecoration(color: AppColors.warningMuted, borderRadius: BorderRadius.circular(3)), child: Text('Peak', style: AppTypography.labelSmall.copyWith(color: AppColors.warning, fontSize: 9), textAlign: TextAlign.center)) : const SizedBox()),
+                              SizedBox(width: 50, child: slot.isAvailable ? Icon(isSelected ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded, size: 18, color: isSelected ? AppColors.accent : AppColors.textTertiary) : Text('Booked', style: AppTypography.labelSmall.copyWith(color: AppColors.textDisabled), textAlign: TextAlign.right)),
+                            ]),
                           ),
-                          child: Row(children: [
-                            Expanded(flex: 2, child: Text(slot.time, style: AppTypography.mono.copyWith(color: slot.isAvailable ? AppColors.textPrimary : AppColors.textDisabled))),
-                            Expanded(flex: 2, child: Text('₹${slot.price?.toInt() ?? 0}', style: AppTypography.mono.copyWith(color: slot.isAvailable ? AppColors.textSecondary : AppColors.textDisabled), textAlign: TextAlign.center)),
-                            Expanded(flex: 1, child: slot.isPeak ? Container(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1), decoration: BoxDecoration(color: AppColors.warningMuted, borderRadius: BorderRadius.circular(3)), child: Text('Peak', style: AppTypography.labelSmall.copyWith(color: AppColors.warning, fontSize: 9), textAlign: TextAlign.center)) : const SizedBox()),
-                            SizedBox(width: 50, child: slot.isAvailable ? Icon(isSelected ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded, size: 18, color: isSelected ? AppColors.accent : AppColors.textTertiary) : Text('Booked', style: AppTypography.labelSmall.copyWith(color: AppColors.textDisabled), textAlign: TextAlign.right)),
-                          ]),
-                        ),
-                      );
-                    },
-                    childCount: _slots.length,
+                        );
+                      },
+                      childCount: _slots.length,
+                    ),
                   ),
-                ),
+                ],
                 const SliverToBoxAdapter(child: SizedBox(height: 16)),
               ],
             ),
@@ -210,12 +254,13 @@ class _TurfBookingScreenState extends State<TurfBookingScreen> {
     final lastHour = int.parse(_slots[sorted.last].time.split(':')[0]) + 1;
     final endTime = '${lastHour.toString().padLeft(2, '0')}:00';
     final checkInToken = const Uuid().v4();
+    final date = _dateForQuery(_selectedDateIndex);
 
     try {
       showDialog(context: context, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator(color: AppColors.accent)));
 
       final result = await FirebaseFunctions.instance.httpsCallable('createBooking').call({
-        'facilityId': 'turf', 'date': _dates[_selectedDateIndex],
+        'facilityId': 'turf', 'date': date,
         'startTime': startTime, 'endTime': endTime,
         'amount': _totalPrice, 'paymentMode': 'online', 'checkInToken': checkInToken,
       });
@@ -228,18 +273,19 @@ class _TurfBookingScreenState extends State<TurfBookingScreen> {
         description: '$startTime — $endTime', facilityName: 'Cricket Turf',
         onSuccess: (bid, pid) {
           if (!mounted) return;
+          OnyxToast.success(context, 'Payment successful! Show this QR at the desk');
           Navigator.push(context, MaterialPageRoute(builder: (_) => BookingQRScreen(
             bookingId: bookingId, checkInToken: checkInToken,
             facilityName: 'Cricket Turf', date: _dates[_selectedDateIndex],
             timeSlot: _timeRange, amount: _totalPrice,
           )));
         },
-        onFailure: (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Payment failed: $e'), backgroundColor: AppColors.error)); },
+        onFailure: (e) { if (mounted) OnyxToast.error(context, e); },
       );
     } catch (e) {
       if (!mounted) return;
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error));
+      OnyxToast.error(context, e);
     }
   }
 }

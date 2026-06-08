@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
-import '../../core/constants/mock_data.dart';
+import '../../core/services/auth_service.dart';
 import '../../models/models.dart';
 import 'court_booking_screen.dart';
 import 'turf_booking_screen.dart';
 import 'nets_booking_screen.dart';
+import 'booking_qr_screen.dart';
 
-/// Bookings Screen — Upcoming, Past, and Cancelled bookings.
-/// The + button opens a facility chooser to start a new booking.
+/// Bookings Screen — Real-time Firestore bookings with QR access.
 class BookingsScreen extends StatefulWidget {
   const BookingsScreen({super.key});
 
@@ -50,7 +51,7 @@ class _BookingsScreenState extends State<BookingsScreen> with SingleTickerProvid
               icon: Icons.sports_tennis_rounded,
               color: AppColors.badminton,
               title: 'Badminton Court',
-              subtitle: '3 courts · ₹300–500/hr',
+              subtitle: '3 courts · ₹400–600/hr',
               onTap: () { Navigator.pop(ctx); Navigator.push(context, MaterialPageRoute(builder: (_) => const CourtBookingScreen())); },
             ),
             const SizedBox(height: 8),
@@ -58,7 +59,7 @@ class _BookingsScreenState extends State<BookingsScreen> with SingleTickerProvid
               icon: Icons.sports_cricket_rounded,
               color: AppColors.cricketTurf,
               title: 'Cricket Turf',
-              subtitle: '1 turf · ₹1200–1800/hr',
+              subtitle: '1 turf · ₹1000–1500/hr',
               onTap: () { Navigator.pop(ctx); Navigator.push(context, MaterialPageRoute(builder: (_) => const TurfBookingScreen())); },
             ),
             const SizedBox(height: 8),
@@ -66,7 +67,7 @@ class _BookingsScreenState extends State<BookingsScreen> with SingleTickerProvid
               icon: Icons.sports_baseball_rounded,
               color: AppColors.cricketNets,
               title: 'Cricket Nets',
-              subtitle: '1 area · ₹400–600/hr',
+              subtitle: '3 lanes · ₹400–600/hr',
               onTap: () { Navigator.pop(ctx); Navigator.push(context, MaterialPageRoute(builder: (_) => const NetsBookingScreen())); },
             ),
             const SizedBox(height: 16),
@@ -78,6 +79,8 @@ class _BookingsScreenState extends State<BookingsScreen> with SingleTickerProvid
 
   @override
   Widget build(BuildContext context) {
+    final userId = AuthService.instance.uid;
+
     return Scaffold(
       appBar: AppBar(
         title: Text('Bookings', style: AppTypography.titleLarge),
@@ -97,13 +100,44 @@ class _BookingsScreenState extends State<BookingsScreen> with SingleTickerProvid
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _BookingList(bookings: MockData.bookings.where((b) => b.status == BookingStatus.upcoming).toList()),
-          _BookingList(bookings: MockData.bookings.where((b) => b.status == BookingStatus.completed).toList()),
-          _BookingList(bookings: MockData.bookings.where((b) => b.status == BookingStatus.cancelled).toList()),
-        ],
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('bookings')
+            .where('userId', isEqualTo: userId)
+            .orderBy('createdAt', descending: true)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Icon(Icons.cloud_off_rounded, size: 40, color: AppColors.textDisabled),
+              const SizedBox(height: 12),
+              Text('Could not load bookings', style: AppTypography.bodyMedium),
+              const SizedBox(height: 8),
+              TextButton(onPressed: () => setState(() {}), child: const Text('Retry')),
+            ]));
+          }
+
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator(color: AppColors.accent));
+          }
+
+          final allBookings = snapshot.data?.docs
+              .map((d) => Booking.fromFirestore(d.data() as Map<String, dynamic>, d.id))
+              .toList() ?? [];
+
+          final upcoming = allBookings.where((b) => b.status == BookingStatus.upcoming || b.status == BookingStatus.active).toList();
+          final past = allBookings.where((b) => b.status == BookingStatus.completed).toList();
+          final cancelled = allBookings.where((b) => b.status == BookingStatus.cancelled).toList();
+
+          return TabBarView(
+            controller: _tabController,
+            children: [
+              _BookingList(bookings: upcoming, showQR: true),
+              _BookingList(bookings: past),
+              _BookingList(bookings: cancelled),
+            ],
+          );
+        },
       ),
     );
   }
@@ -149,7 +183,8 @@ class _BookingOption extends StatelessWidget {
 
 class _BookingList extends StatelessWidget {
   final List<Booking> bookings;
-  const _BookingList({required this.bookings});
+  final bool showQR;
+  const _BookingList({required this.bookings, this.showQR = false});
 
   @override
   Widget build(BuildContext context) {
@@ -160,7 +195,9 @@ class _BookingList extends StatelessWidget {
           children: [
             Icon(Icons.calendar_today_rounded, size: 40, color: AppColors.textDisabled),
             const SizedBox(height: 12),
-            Text('No bookings', style: AppTypography.bodyMedium),
+            Text('No bookings yet', style: AppTypography.bodyMedium),
+            const SizedBox(height: 4),
+            Text('Your bookings will appear here', style: AppTypography.bodySmall),
           ],
         ),
       );
@@ -197,7 +234,7 @@ class _BookingList extends StatelessWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(booking.facilityName, style: AppTypography.titleSmall),
+                        Expanded(child: Text(booking.facilityName, style: AppTypography.titleSmall, overflow: TextOverflow.ellipsis)),
                         _StatusBadge(status: booking.status),
                       ],
                     ),
@@ -205,7 +242,7 @@ class _BookingList extends StatelessWidget {
                     Row(children: [
                       Icon(Icons.access_time_rounded, size: 12, color: AppColors.textTertiary),
                       const SizedBox(width: 4),
-                      Text('${booking.date} · ${booking.timeSlot} · ${booking.durationMinutes}min', style: AppTypography.bodySmall),
+                      Expanded(child: Text('${booking.date} · ${booking.timeSlot}', style: AppTypography.bodySmall, overflow: TextOverflow.ellipsis)),
                     ]),
                     if (booking.amount != null) ...[
                       const SizedBox(height: 4),
@@ -214,6 +251,34 @@ class _BookingList extends StatelessWidget {
                   ],
                 ),
               ),
+
+              // QR button for upcoming/active bookings
+              if (showQR && booking.checkInToken != null) ...[
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: () {
+                    Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => BookingQRScreen(
+                        bookingId: booking.id,
+                        checkInToken: booking.checkInToken!,
+                        facilityName: booking.facilityName,
+                        date: booking.date,
+                        timeSlot: booking.timeSlot,
+                        amount: booking.amount ?? 0,
+                        courtNumber: booking.courtNumber,
+                      ),
+                    ));
+                  },
+                  child: Container(
+                    width: 36, height: 36,
+                    decoration: BoxDecoration(
+                      color: AppColors.accent.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(Icons.qr_code_rounded, size: 18, color: AppColors.accent),
+                  ),
+                ),
+              ],
             ],
           ),
         );

@@ -375,7 +375,8 @@ class _RoleBadge extends StatelessWidget {
 
   String get _label => switch (role) {
     UserRole.guest => 'Guest',
-    UserRole.coachingMember => 'Member',
+    UserRole.member => 'Member',
+    UserRole.coachingMember => 'Coaching',
     UserRole.coach => 'Coach',
     UserRole.receptionist => 'Receptionist',
     UserRole.facilityManager => 'Manager',
