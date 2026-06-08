@@ -2,16 +2,15 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/notification_item.dart';
-import '../../core/constants/mock_data.dart';
-
+import '../../models/models.dart';
 /// Notifications Screen — Grouped notification feed.
 class NotificationsScreen extends StatelessWidget {
   const NotificationsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final unread = MockData.notifications.where((n) => !n.isRead).toList();
-    final read = MockData.notifications.where((n) => n.isRead).toList();
+    final List<NotificationItem> unread = []; // TODO: Fetch from Firestore
+    final List<NotificationItem> read = [];
 
     return Scaffold(
       appBar: AppBar(

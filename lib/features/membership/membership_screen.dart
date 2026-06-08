@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/section_header.dart';
-import '../../core/constants/mock_data.dart';
+import '../../core/services/auth_service.dart';
 
 /// Membership Screen — Plan display, digital card, QR pass, payment history.
 class MembershipScreen extends StatelessWidget {
@@ -10,7 +10,11 @@ class MembershipScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final user = MockData.currentUser;
+    final auth = AuthService.instance;
+    final userName = auth.displayName;
+    final profile = auth.profile ?? {};
+    final isMembershipActive = profile['membershipStatus'] == 'active';
+    final membershipType = profile['membershipType'] ?? 'None';
 
     return Scaffold(
       appBar: AppBar(
@@ -54,17 +58,17 @@ class MembershipScreen extends StatelessWidget {
                           borderRadius: BorderRadius.circular(4),
                           border: Border.all(color: AppColors.success.withValues(alpha: 0.2)),
                         ),
-                        child: Text('ACTIVE', style: AppTypography.labelSmall.copyWith(
-                          color: AppColors.success,
+                        child: Text(isMembershipActive ? 'ACTIVE' : 'INACTIVE', style: AppTypography.labelSmall.copyWith(
+                          color: isMembershipActive ? AppColors.success : AppColors.textSecondary,
                           letterSpacing: 1,
                         )),
                       ),
                     ],
                   ),
                   const SizedBox(height: 20),
-                  Text(user.name, style: AppTypography.headlineSmall),
+                  Text(userName, style: AppTypography.headlineSmall),
                   const SizedBox(height: 4),
-                  Text('Quarterly Membership', style: AppTypography.bodySmall),
+                  Text('$membershipType Membership', style: AppTypography.bodySmall),
                   const SizedBox(height: 16),
                   Row(
                     children: [
@@ -169,37 +173,11 @@ class MembershipScreen extends StatelessWidget {
                       ],
                     ),
                   ),
-                  ...MockData.payments.map((payment) => Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    decoration: BoxDecoration(
-                      border: Border(bottom: BorderSide(color: AppColors.border.withValues(alpha: 0.5))),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(flex: 3, child: Text(payment.description, style: AppTypography.bodySmall.copyWith(color: AppColors.textPrimary))),
-                        Expanded(flex: 2, child: Text('₹${payment.amount.toInt()}', style: AppTypography.mono.copyWith(fontSize: 12), textAlign: TextAlign.right)),
-                        Expanded(flex: 2, child: Text(payment.date, style: AppTypography.bodySmall, textAlign: TextAlign.right)),
-                        SizedBox(
-                          width: 56,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                            decoration: BoxDecoration(
-                              color: payment.status == 'paid' ? AppColors.success.withValues(alpha: 0.1) : AppColors.warningMuted,
-                              borderRadius: BorderRadius.circular(3),
-                            ),
-                            child: Text(
-                              payment.status == 'paid' ? 'Paid' : 'Pending',
-                              style: AppTypography.labelSmall.copyWith(
-                                color: payment.status == 'paid' ? AppColors.success : AppColors.warning,
-                                fontSize: 9,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  )),
+                  // Payments list placeholder
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Center(child: Text('No recent payments', style: AppTypography.bodySmall)),
+                  ),
                 ],
               ),
             ),

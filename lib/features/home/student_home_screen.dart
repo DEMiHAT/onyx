@@ -3,7 +3,8 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/status_chip.dart';
 import '../../core/widgets/section_header.dart';
-import '../../core/constants/mock_data.dart';
+import '../../core/services/auth_service.dart';
+import '../../core/services/booking_service.dart';
 import '../../models/models.dart';
 import '../facility/facility_detail_screen.dart';
 import '../bookings/court_booking_screen.dart';
@@ -17,8 +18,8 @@ class StudentHomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final user = MockData.currentUser;
-    final nextSession = MockData.coachingSessions.isNotEmpty ? MockData.coachingSessions.first : null;
+    final userName = AuthService.instance.displayName.split(' ').first;
+    final CoachingSession? nextSession = null; // TODO: Fetch from Firestore when coaching is migrated
 
     return Scaffold(
       body: CustomScrollView(
@@ -43,7 +44,7 @@ class StudentHomeScreen extends StatelessWidget {
               child: Row(children: [
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text('Good morning,', style: AppTypography.bodySmall),
-                  Text(user.name.split(' ').first, style: AppTypography.headlineMedium),
+                  Text(userName, style: AppTypography.headlineMedium),
                 ])),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -51,7 +52,7 @@ class StudentHomeScreen extends StatelessWidget {
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
                     Icon(Icons.local_fire_department_rounded, size: 14, color: AppColors.warning),
                     const SizedBox(width: 4),
-                    Text('${user.currentStreak} day streak', style: AppTypography.labelSmall.copyWith(color: AppColors.accent)),
+                    Text('Keep going!', style: AppTypography.labelSmall.copyWith(color: AppColors.accent)),
                   ]),
                 ),
               ]),
@@ -171,28 +172,33 @@ class StudentHomeScreen extends StatelessWidget {
           // ── Live Facility Board ────────────────────────────
           const SliverToBoxAdapter(child: SectionHeader(title: 'Facility Status', padding: EdgeInsets.fromLTRB(16, 20, 16, 6))),
           SliverToBoxAdapter(
-            child: Container(
-              margin: const EdgeInsets.fromLTRB(16, 0, 16, 32),
-              decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.border)),
-              child: Column(
-                children: MockData.facilities.asMap().entries.map((e) {
-                  final f = e.value;
-                  final isLast = e.key == MockData.facilities.length - 1;
-                  return InkWell(
-                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => FacilityDetailScreen(facility: f))),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      decoration: BoxDecoration(border: isLast ? null : const Border(bottom: BorderSide(color: AppColors.border))),
-                      child: Row(children: [
-                        Icon(f.type == FacilityType.badmintonCourt ? Icons.sports_tennis_rounded : f.type == FacilityType.cricketTurf ? Icons.sports_cricket_rounded : Icons.sports_baseball_rounded, size: 16, color: AppColors.textTertiary),
-                        const SizedBox(width: 8),
-                        Expanded(child: Text(f.shortName, style: AppTypography.titleSmall)),
-                        StatusChip(status: f.status, compact: true),
-                      ]),
-                    ),
-                  );
-                }).toList(),
-              ),
+            child: StreamBuilder<List<Facility>>(
+              stream: BookingService.instance.getFacilities(),
+              builder: (ctx, snap) {
+                if (!snap.hasData) return const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator(color: AppColors.accent)));
+                final facilities = snap.data!;
+                return Container(
+                  margin: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+                  decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.border)),
+                  child: Column(children: facilities.asMap().entries.map((e) {
+                    final f = e.value;
+                    final isLast = e.key == facilities.length - 1;
+                    return InkWell(
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => FacilityDetailScreen(facility: f))),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(border: isLast ? null : const Border(bottom: BorderSide(color: AppColors.border))),
+                        child: Row(children: [
+                          Icon(f.type == FacilityType.badmintonCourt ? Icons.sports_tennis_rounded : f.type == FacilityType.cricketTurf ? Icons.sports_cricket_rounded : Icons.sports_baseball_rounded, size: 16, color: AppColors.textTertiary),
+                          const SizedBox(width: 8),
+                          Expanded(child: Text(f.shortName, style: AppTypography.titleSmall)),
+                          StatusChip(status: f.status, compact: true),
+                        ]),
+                      ),
+                    );
+                  }).toList()),
+                );
+              },
             ),
           ),
         ],

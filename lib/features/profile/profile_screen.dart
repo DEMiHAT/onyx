@@ -3,7 +3,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/section_header.dart';
 import '../../core/widgets/stat_card.dart';
-import '../../core/constants/mock_data.dart';
+import '../../core/services/auth_service.dart';
 import '../../models/models.dart';
 import '../analytics/analytics_screen.dart';
 import '../coaching/coaching_member_screen.dart';
@@ -30,7 +30,18 @@ class ProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final user = MockData.currentUser;
+    final auth = AuthService.instance;
+    final profile = auth.profile ?? {};
+    final userName = auth.displayName;
+    final initials = userName.split(' ').map((w) => w.isNotEmpty ? w[0] : '').take(2).join();
+    
+    final level = profile['level'] ?? 'Beginner';
+    final hasMembership = profile['membershipStatus'] == 'active';
+    final membershipType = profile['membershipType'] ?? '';
+    final totalSessions = profile['totalSessions'] ?? 0;
+    final totalHours = profile['totalHours'] ?? 0;
+    final currentStreak = profile['currentStreak'] ?? 0;
+    final favoriteFacility = profile['favoriteFacility'] ?? 'N/A';
 
     return Scaffold(
       body: CustomScrollView(
@@ -55,7 +66,7 @@ class ProfileScreen extends StatelessWidget {
                     radius: 28,
                     backgroundColor: AppColors.surfaceSecondary,
                     child: Text(
-                      user.name.split(' ').map((w) => w[0]).take(2).join(),
+                      initials,
                       style: AppTypography.titleLarge.copyWith(color: AppColors.accent),
                     ),
                   ),
@@ -64,16 +75,16 @@ class ProfileScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(user.name, style: AppTypography.headlineSmall),
+                        Text(userName, style: AppTypography.headlineSmall),
                         const SizedBox(height: 2),
                         Row(
                           children: [
                             _RoleBadge(role: role),
                             if (_isPlayer) ...[
                               const SizedBox(width: 8),
-                              _LevelBadge(level: user.level),
+                              _LevelBadge(level: level),
                             ],
-                            if (_isPlayer && user.membershipStatus == MembershipStatus.active) ...[
+                            if (_isPlayer && hasMembership) ...[
                               const SizedBox(width: 8),
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -82,7 +93,7 @@ class ProfileScreen extends StatelessWidget {
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Text(
-                                  '${user.membershipType?.name[0].toUpperCase()}${user.membershipType?.name.substring(1)}',
+                                  membershipType.isNotEmpty ? '${membershipType[0].toUpperCase()}${membershipType.substring(1)}' : 'Member',
                                   style: AppTypography.labelSmall.copyWith(color: AppColors.success),
                                 ),
                               ),
@@ -117,17 +128,17 @@ class ProfileScreen extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Expanded(child: StatCard(label: 'Sessions', value: '${user.totalSessions}', icon: Icons.sports_tennis_rounded)),
+                        Expanded(child: StatCard(label: 'Sessions', value: '$totalSessions', icon: Icons.sports_tennis_rounded)),
                         const SizedBox(width: 8),
-                        Expanded(child: StatCard(label: 'Hours', value: '${user.totalHours}', icon: Icons.access_time_rounded)),
+                        Expanded(child: StatCard(label: 'Hours', value: '$totalHours', icon: Icons.access_time_rounded)),
                       ],
                     ),
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        Expanded(child: StatCard(label: 'Streak', value: '${user.currentStreak}d', trend: 'Personal best: 21d', icon: Icons.local_fire_department_rounded)),
+                        Expanded(child: StatCard(label: 'Streak', value: '${currentStreak}d', trend: 'Personal best: 21d', icon: Icons.local_fire_department_rounded)),
                         const SizedBox(width: 8),
-                        Expanded(child: StatCard(label: 'Favorite', value: user.favoriteFacility, icon: Icons.favorite_rounded)),
+                        Expanded(child: StatCard(label: 'Favorite', value: favoriteFacility, icon: Icons.favorite_rounded)),
                       ],
                     ),
                   ],
@@ -146,40 +157,9 @@ class ProfileScreen extends StatelessWidget {
               ),
             ),
             SliverToBoxAdapter(
-              child: SizedBox(
-                height: 80,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: MockData.achievements.where((a) => a.unlocked).length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 8),
-                  itemBuilder: (context, index) {
-                    final achievement = MockData.achievements.where((a) => a.unlocked).elementAt(index);
-                    return Container(
-                      width: 90,
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: AppColors.surface,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: AppColors.border),
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(achievement.icon, style: const TextStyle(fontSize: 22)),
-                          const SizedBox(height: 4),
-                          Text(
-                            achievement.title,
-                            style: AppTypography.labelSmall,
-                            textAlign: TextAlign.center,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Text('Play matches to earn achievements', style: AppTypography.bodySmall),
               ),
             ),
           ],
@@ -190,7 +170,7 @@ class ProfileScreen extends StatelessWidget {
               child: SectionHeader(title: 'Membership', padding: EdgeInsets.fromLTRB(16, 20, 16, 8)),
             ),
             SliverToBoxAdapter(
-              child: user.membershipStatus == MembershipStatus.active
+              child: profile['membershipStatus'] == 'active'
                   ? Container(
                       margin: const EdgeInsets.symmetric(horizontal: 16),
                       padding: const EdgeInsets.all(14),
@@ -212,7 +192,7 @@ class ProfileScreen extends StatelessWidget {
                         Row(children: [
                           Icon(Icons.calendar_today_rounded, size: 13, color: AppColors.textTertiary),
                           const SizedBox(width: 6),
-                          Text('Expires ${user.membershipExpiry}', style: AppTypography.bodySmall),
+                          Text('Expires ${profile['membershipExpiry'] ?? 'N/A'}', style: AppTypography.bodySmall),
                         ]),
                         const SizedBox(height: 12),
                         Row(children: [

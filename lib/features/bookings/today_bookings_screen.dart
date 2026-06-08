@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/section_header.dart';
-import '../../core/constants/mock_data.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/models.dart';
 
 /// Today's Bookings Screen — Staff view of all bookings for today.
@@ -12,70 +12,82 @@ class TodayBookingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final allBookings = MockData.bookings;
-    final active = allBookings.where((b) => b.status == BookingStatus.active).toList();
-    final upcoming = allBookings.where((b) => b.status == BookingStatus.upcoming).toList();
-    final completed = allBookings.where((b) => b.status == BookingStatus.completed).toList();
-
     return Scaffold(
       appBar: AppBar(
         title: Text("Today's Bookings", style: AppTypography.titleLarge),
       ),
-      body: CustomScrollView(
-        slivers: [
-          // ── Summary ────────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: Container(
-              margin: const EdgeInsets.all(16),
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.border)),
-              child: Row(children: [
-                _CountChip(label: 'Active', count: active.length, color: AppColors.success),
-                const SizedBox(width: 12),
-                _CountChip(label: 'Upcoming', count: upcoming.length, color: AppColors.accent),
-                const SizedBox(width: 12),
-                _CountChip(label: 'Completed', count: completed.length, color: AppColors.textTertiary),
-                const SizedBox(width: 12),
-                _CountChip(label: 'Total', count: allBookings.length, color: AppColors.textPrimary),
-              ]),
-            ),
-          ),
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance.collection('bookings')
+            .where('date', isEqualTo: 'Today') // Simplify or match current day format
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+          
+          final allBookings = snapshot.data!.docs
+              .map((doc) => Booking.fromFirestore(doc.data() as Map<String, dynamic>, doc.id))
+              .toList();
 
-          // ── Active Now ─────────────────────────────────────────
-          if (active.isNotEmpty) ...[
-            const SliverToBoxAdapter(child: SectionHeader(title: 'Active Now', padding: EdgeInsets.fromLTRB(16, 4, 16, 8))),
-            SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (_, i) => _StaffBookingCard(booking: active[i], showCheckIn: false),
-                childCount: active.length,
+          final active = allBookings.where((b) => b.status == BookingStatus.active).toList();
+          final upcoming = allBookings.where((b) => b.status == BookingStatus.upcoming).toList();
+          final completed = allBookings.where((b) => b.status == BookingStatus.completed).toList();
+
+          return CustomScrollView(
+            slivers: [
+              // ── Summary ────────────────────────────────────────────
+              SliverToBoxAdapter(
+                child: Container(
+                  margin: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.border)),
+                  child: Row(children: [
+                    _CountChip(label: 'Active', count: active.length, color: AppColors.success),
+                    const SizedBox(width: 12),
+                    _CountChip(label: 'Upcoming', count: upcoming.length, color: AppColors.accent),
+                    const SizedBox(width: 12),
+                    _CountChip(label: 'Completed', count: completed.length, color: AppColors.textTertiary),
+                    const SizedBox(width: 12),
+                    _CountChip(label: 'Total', count: allBookings.length, color: AppColors.textPrimary),
+                  ]),
+                ),
               ),
-            ),
-          ],
 
-          // ── Upcoming ───────────────────────────────────────────
-          if (upcoming.isNotEmpty) ...[
-            const SliverToBoxAdapter(child: SectionHeader(title: 'Upcoming', padding: EdgeInsets.fromLTRB(16, 16, 16, 8))),
-            SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (_, i) => _StaffBookingCard(booking: upcoming[i], showCheckIn: true),
-                childCount: upcoming.length,
-              ),
-            ),
-          ],
+              // ── Active Now ─────────────────────────────────────────
+              if (active.isNotEmpty) ...[
+                const SliverToBoxAdapter(child: SectionHeader(title: 'Active Now', padding: EdgeInsets.fromLTRB(16, 4, 16, 8))),
+                SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (_, i) => _StaffBookingCard(booking: active[i], showCheckIn: false),
+                    childCount: active.length,
+                  ),
+                ),
+              ],
 
-          // ── Completed ──────────────────────────────────────────
-          if (completed.isNotEmpty) ...[
-            const SliverToBoxAdapter(child: SectionHeader(title: 'Completed', padding: EdgeInsets.fromLTRB(16, 16, 16, 8))),
-            SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (_, i) => _StaffBookingCard(booking: completed[i], showCheckIn: false),
-                childCount: completed.length,
-              ),
-            ),
-          ],
+              // ── Upcoming ───────────────────────────────────────────
+              if (upcoming.isNotEmpty) ...[
+                const SliverToBoxAdapter(child: SectionHeader(title: 'Upcoming', padding: EdgeInsets.fromLTRB(16, 16, 16, 8))),
+                SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (_, i) => _StaffBookingCard(booking: upcoming[i], showCheckIn: true),
+                    childCount: upcoming.length,
+                  ),
+                ),
+              ],
 
-          const SliverToBoxAdapter(child: SizedBox(height: 32)),
-        ],
+              // ── Completed ──────────────────────────────────────────
+              if (completed.isNotEmpty) ...[
+                const SliverToBoxAdapter(child: SectionHeader(title: 'Completed', padding: EdgeInsets.fromLTRB(16, 16, 16, 8))),
+                SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (_, i) => _StaffBookingCard(booking: completed[i], showCheckIn: false),
+                    childCount: completed.length,
+                  ),
+                ),
+              ],
+
+              const SliverToBoxAdapter(child: SizedBox(height: 32)),
+            ],
+          );
+        }
       ),
     );
   }

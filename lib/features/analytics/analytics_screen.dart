@@ -3,7 +3,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/section_header.dart';
 import '../../core/widgets/stat_card.dart';
-import '../../core/constants/mock_data.dart';
+
 
 /// Analytics Screen — Player activity analytics with charts.
 class AnalyticsScreen extends StatelessWidget {
@@ -11,7 +11,12 @@ class AnalyticsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final user = MockData.currentUser;
+    // Placeholder analytics data
+    const totalSessions = 42;
+    const totalHours = 65.5;
+    const favoriteFacility = 'Badminton';
+    const mostActiveDay = 'Saturday';
+    const currentStreak = 5;
 
     return Scaffold(
       appBar: AppBar(
@@ -46,17 +51,17 @@ class AnalyticsScreen extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Expanded(child: StatCard(label: 'Total Sessions', value: '${user.totalSessions}', trend: '+12 this month', icon: Icons.sports_tennis_rounded)),
+                      Expanded(child: StatCard(label: 'Total Sessions', value: '$totalSessions', trend: '+12 this month', icon: Icons.sports_tennis_rounded)),
                       const SizedBox(width: 8),
-                      Expanded(child: StatCard(label: 'Hours Played', value: '${user.totalHours}', trend: '+18h this month', icon: Icons.timer_rounded)),
+                      Expanded(child: StatCard(label: 'Hours Played', value: '$totalHours', trend: '+18h this month', icon: Icons.timer_rounded)),
                     ],
                   ),
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      Expanded(child: StatCard(label: 'Favorite Facility', value: user.favoriteFacility, icon: Icons.favorite_rounded)),
+                      Expanded(child: StatCard(label: 'Favorite Facility', value: favoriteFacility, icon: Icons.favorite_rounded)),
                       const SizedBox(width: 8),
-                      Expanded(child: StatCard(label: 'Most Active Day', value: user.mostActiveDay, icon: Icons.calendar_today_rounded)),
+                      Expanded(child: StatCard(label: 'Most Active Day', value: mostActiveDay, icon: Icons.calendar_today_rounded)),
                     ],
                   ),
                 ],
@@ -158,7 +163,7 @@ class AnalyticsScreen extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
               child: Row(
                 children: [
-                  Expanded(child: StatCard(label: 'Current', value: '${user.currentStreak}d', icon: Icons.local_fire_department_rounded)),
+                  Expanded(child: StatCard(label: 'Current', value: '${currentStreak}d', icon: Icons.local_fire_department_rounded)),
                   const SizedBox(width: 8),
                   Expanded(child: StatCard(label: 'Best', value: '21d', icon: Icons.emoji_events_rounded)),
                   const SizedBox(width: 8),

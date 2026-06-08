@@ -3,7 +3,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/section_header.dart';
 import '../../core/widgets/stat_card.dart';
-import '../../core/constants/mock_data.dart';
+import '../../models/models.dart';
 import 'manual_attendance_screen.dart';
 import 'student_biodata_screen.dart';
 import 'coach_announcements_screen.dart';
@@ -47,7 +47,9 @@ class CoachDashboardScreen extends StatelessWidget {
           ),
           SliverToBoxAdapter(
             child: Column(
-              children: MockData.coachBatches.map((batch) {
+              children: (() {
+                final batches = <CoachBatch>[]; // TODO: Fetch from Firestore
+                return batches.map((batch) {
                 return Container(
                   margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                   padding: const EdgeInsets.all(14),
@@ -134,7 +136,8 @@ class CoachDashboardScreen extends StatelessWidget {
                     ],
                   ),
                 );
-              }).toList(),
+              }).toList();
+              })(),
             ),
           ),
 

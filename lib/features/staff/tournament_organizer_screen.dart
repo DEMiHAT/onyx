@@ -3,7 +3,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/section_header.dart';
 import '../../core/widgets/stat_card.dart';
-import '../../core/constants/mock_data.dart';
+import '../../models/models.dart';
 
 class TournamentOrganizerScreen extends StatelessWidget {
   const TournamentOrganizerScreen({super.key});
@@ -40,29 +40,40 @@ class TournamentOrganizerScreen extends StatelessWidget {
           const SliverToBoxAdapter(child: SectionHeader(title: 'Active Tournaments', padding: EdgeInsets.fromLTRB(16, 4, 16, 8))),
           SliverToBoxAdapter(
             child: Column(
-              children: MockData.tournaments.map((t) => Container(
-                margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.border)),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                    Expanded(child: Text(t.name, style: AppTypography.titleMedium)),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(color: (t.status == 'ongoing' ? AppColors.success : AppColors.accent).withValues(alpha: 0.1), borderRadius: BorderRadius.circular(3)),
-                      child: Text(t.status.toUpperCase(), style: AppTypography.labelSmall.copyWith(color: t.status == 'ongoing' ? AppColors.success : AppColors.accent, fontSize: 10)),
-                    ),
+              children: () {
+                final tournaments = <Tournament>[]; // TODO: Fetch from Firestore
+                if (tournaments.isEmpty) {
+                  return [
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Center(child: Text('No active tournaments', style: AppTypography.bodySmall)),
+                    )
+                  ];
+                }
+                return tournaments.map((t) => Container(
+                  margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.border)),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                      Expanded(child: Text(t.name, style: AppTypography.titleMedium)),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(color: (t.status == 'ongoing' ? AppColors.success : AppColors.accent).withValues(alpha: 0.1), borderRadius: BorderRadius.circular(3)),
+                        child: Text(t.status.toUpperCase(), style: AppTypography.labelSmall.copyWith(color: t.status == 'ongoing' ? AppColors.success : AppColors.accent, fontSize: 10)),
+                      ),
+                    ]),
+                    const SizedBox(height: 8),
+                    Text('${t.date} · ${t.participants}/${t.maxParticipants} players · ₹${t.prizePool.toInt()} pool', style: AppTypography.bodySmall),
+                    const SizedBox(height: 10),
+                    Row(children: [
+                      Expanded(child: OutlinedButton(onPressed: () {}, child: const Text('Fixtures'))),
+                      const SizedBox(width: 8),
+                      Expanded(child: OutlinedButton(onPressed: () {}, child: const Text('Results'))),
+                    ]),
                   ]),
-                  const SizedBox(height: 8),
-                  Text('${t.date} · ${t.participants}/${t.maxParticipants} players · ₹${t.prizePool.toInt()} pool', style: AppTypography.bodySmall),
-                  const SizedBox(height: 10),
-                  Row(children: [
-                    Expanded(child: OutlinedButton(onPressed: () {}, child: const Text('Fixtures'))),
-                    const SizedBox(width: 8),
-                    Expanded(child: OutlinedButton(onPressed: () {}, child: const Text('Results'))),
-                  ]),
-                ]),
-              )).toList(),
+                )).toList();
+              }(),
             ),
           ),
           const SliverToBoxAdapter(child: SectionHeader(title: 'Actions', padding: EdgeInsets.fromLTRB(16, 16, 16, 8))),

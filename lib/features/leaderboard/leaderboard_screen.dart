@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
-import '../../core/constants/mock_data.dart';
+import '../../core/services/auth_service.dart';
 import '../../models/models.dart';
 
 /// Leaderboard Screen — Activity-based rankings (NOT win-based).
@@ -64,7 +64,7 @@ class _LeaderboardTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final entries = List<LeaderboardEntry>.from(MockData.leaderboard);
+    final entries = <LeaderboardEntry>[]; // TODO: Fetch from Firestore
 
     // Sort based on tab
     if (sortBy == 'hours') {
@@ -98,7 +98,8 @@ class _LeaderboardTable extends StatelessWidget {
             itemCount: entries.length,
             itemBuilder: (context, index) {
               final entry = entries[index];
-              final isCurrentUser = entry.playerName == 'Sriram Kumar';
+              final userName = AuthService.instance.displayName;
+              final isCurrentUser = entry.playerName == userName;
               final displayRank = index + 1;
 
               return Container(

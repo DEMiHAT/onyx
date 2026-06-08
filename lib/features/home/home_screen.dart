@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/status_chip.dart';
 import '../../core/widgets/section_header.dart';
-import '../../core/constants/mock_data.dart';
+import '../../core/services/auth_service.dart';
+import '../../core/services/booking_service.dart';
 import '../../models/models.dart';
 import '../facility/facility_detail_screen.dart';
 import '../bookings/court_booking_screen.dart';
@@ -22,8 +24,8 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final user = MockData.currentUser;
-    final availableCount = MockData.facilities.where((f) => f.status == FacilityStatus.available).length;
+    final auth = AuthService.instance;
+    final userName = auth.displayName.split(' ').first;
 
 
     return Scaffold(
@@ -57,7 +59,7 @@ class HomeScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('Welcome back,', style: AppTypography.bodySmall),
-                  Text(user.name.split(' ').first, style: AppTypography.headlineMedium),
+                  Text(userName, style: AppTypography.headlineMedium),
                 ],
               ),
             ),
@@ -67,13 +69,19 @@ class HomeScreen extends StatelessWidget {
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-              child: Row(children: [
-                _MiniStat(label: 'Open', value: '$availableCount', color: AppColors.success),
-                const SizedBox(width: 8),
-                _MiniStat(label: 'Streak', value: '${user.currentStreak}d', color: AppColors.accent),
-                const SizedBox(width: 8),
-                _MiniStat(label: 'Sessions', value: '${user.totalSessions}', color: AppColors.textTertiary),
-              ]),
+              child: StreamBuilder<List<Facility>>(
+                stream: BookingService.instance.getFacilities(),
+                builder: (ctx, snap) {
+                  final open = snap.data?.where((f) => f.status == FacilityStatus.available).length ?? 0;
+                  return Row(children: [
+                    _MiniStat(label: 'Open', value: '$open', color: AppColors.success),
+                    const SizedBox(width: 8),
+                    _MiniStat(label: 'Total', value: '${snap.data?.length ?? 0}', color: AppColors.accent),
+                    const SizedBox(width: 8),
+                    _MiniStat(label: 'Booked', value: '${(snap.data?.length ?? 0) - open}', color: AppColors.textTertiary),
+                  ]);
+                },
+              ),
             ),
           ),
 
@@ -82,20 +90,17 @@ class HomeScreen extends StatelessWidget {
             child: SectionHeader(title: 'Live Status', padding: EdgeInsets.fromLTRB(16, 20, 16, 6)),
           ),
           SliverToBoxAdapter(
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Column(
-                children: MockData.facilities.asMap().entries.map((entry) {
-                  final facility = entry.value;
-                  final isLast = entry.key == MockData.facilities.length - 1;
-                  return _FacilityTile(facility: facility, isLast: isLast);
-                }).toList(),
-              ),
+            child: StreamBuilder<List<Facility>>(
+              stream: BookingService.instance.getFacilities(),
+              builder: (ctx, snap) {
+                if (!snap.hasData) return const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator(color: AppColors.accent)));
+                final facilities = snap.data!;
+                return Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 16),
+                  decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.border)),
+                  child: Column(children: facilities.asMap().entries.map((entry) => _FacilityTile(facility: entry.value, isLast: entry.key == facilities.length - 1)).toList()),
+                );
+              },
             ),
           ),
 
@@ -117,27 +122,27 @@ class HomeScreen extends StatelessWidget {
             ),
           ),
 
-          // ── Upcoming Bookings ──────────────────────────────────
+          // ── Upcoming Bookings (Firestore) ──────────────────────
           SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 20, 16, 6),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('UPCOMING', style: AppTypography.overline),
-                  Text('${MockData.bookings.where((b) => b.status == BookingStatus.upcoming).length} bookings', style: AppTypography.bodySmall),
-                ],
-              ),
-            ),
-          ),
-          SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, index) {
-                final upcoming = MockData.bookings.where((b) => b.status == BookingStatus.upcoming).toList();
-                if (index >= upcoming.length) return null;
-                return _BookingTile(booking: upcoming[index]);
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance.collection('bookings')
+                  .where('status', whereIn: ['upcoming', 'active'])
+                  .orderBy('createdAt', descending: true)
+                  .limit(5)
+                  .snapshots(),
+              builder: (ctx, snap) {
+                final bookings = snap.data?.docs.map((d) => Booking.fromFirestore(d.data() as Map<String, dynamic>, d.id)).toList() ?? [];
+                return Column(children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 20, 16, 6),
+                    child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                      Text('UPCOMING', style: AppTypography.overline),
+                      Text('${bookings.length} bookings', style: AppTypography.bodySmall),
+                    ]),
+                  ),
+                  ...bookings.map((b) => _BookingTile(booking: b)),
+                ]);
               },
-              childCount: MockData.bookings.where((b) => b.status == BookingStatus.upcoming).length,
             ),
           ),
 

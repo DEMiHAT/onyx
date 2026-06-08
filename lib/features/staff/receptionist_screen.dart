@@ -4,7 +4,7 @@ import '../../core/theme/app_typography.dart';
 import '../../core/widgets/status_chip.dart';
 import '../../core/widgets/section_header.dart';
 import '../../core/widgets/stat_card.dart';
-import '../../core/constants/mock_data.dart';
+import '../../core/services/booking_service.dart';
 import '../../models/models.dart';
 import 'qr_scanner_screen.dart';
 
@@ -68,16 +68,16 @@ class ReceptionistScreen extends StatelessWidget {
             child: SectionHeader(title: 'Facility Occupancy', padding: EdgeInsets.fromLTRB(16, 4, 16, 8)),
           ),
           SliverToBoxAdapter(
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Column(
-                children: MockData.facilities.map((f) => _FacilityOccupancyRow(facility: f)).toList(),
-              ),
+            child: StreamBuilder<List<Facility>>(
+              stream: BookingService.instance.getFacilities(),
+              builder: (ctx, snap) {
+                if (!snap.hasData) return const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator(color: AppColors.accent)));
+                return Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 16),
+                  decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.border)),
+                  child: Column(children: snap.data!.map((f) => _FacilityOccupancyRow(facility: f)).toList()),
+                );
+              },
             ),
           ),
 

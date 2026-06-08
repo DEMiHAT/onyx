@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
-import '../../core/constants/mock_data.dart';
+
 import '../../models/models.dart';
 
 /// Community Screen — Open Play, Find Players, Tournaments, Activity Feed
@@ -181,11 +181,12 @@ class _FeedCard extends StatelessWidget {
 class _OpenPlayList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    final requests = <OpenPlayRequest>[]; // TODO: Fetch from Firestore
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: MockData.openPlayRequests.length,
+      itemCount: requests.length,
       itemBuilder: (context, index) {
-        final r = MockData.openPlayRequests[index];
+        final r = requests[index];
         final spotsLeft = r.playersNeeded - r.playersJoined;
         return Container(
           margin: const EdgeInsets.only(bottom: 10),
@@ -366,11 +367,12 @@ class _PlayerData {
 class _TournamentsList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    final tournaments = <Tournament>[]; // TODO: Fetch from Firestore
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: MockData.tournaments.length,
+      itemCount: tournaments.length,
       itemBuilder: (context, index) {
-        final t = MockData.tournaments[index];
+        final t = tournaments[index];
         final isOngoing = t.status == 'ongoing';
         final spotsLeft = t.maxParticipants - t.participants;
         return Container(

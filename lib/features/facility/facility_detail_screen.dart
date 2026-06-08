@@ -5,7 +5,7 @@ import '../../core/widgets/status_chip.dart';
 import '../../core/widgets/section_header.dart';
 import '../../core/widgets/stat_card.dart';
 import '../../core/widgets/timeline_item.dart';
-import '../../core/constants/mock_data.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/models.dart';
 
 /// Facility Detail Screen — Full detail view for any facility.
@@ -135,17 +135,32 @@ class FacilityDetailScreen extends StatelessWidget {
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Column(
-                children: List.generate(MockData.court1Timeline.length, (index) {
-                  final entry = MockData.court1Timeline[index];
-                  return TimelineItemWidget(
-                    time: entry.time,
-                    title: entry.userName,
-                    subtitle: '${entry.durationMinutes} min session',
-                    isCurrent: entry.isCurrent,
-                    isLast: index == MockData.court1Timeline.length - 1,
+              child: StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance.collection('bookings')
+                  .where('facilityId', isEqualTo: facility.id)
+                  .where('date', isEqualTo: 'Today') // Or specific date format
+                  .snapshots(),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 24),
+                      child: Center(child: Text('No upcoming bookings today.', style: AppTypography.bodySmall)),
+                    );
+                  }
+                  final docs = snapshot.data!.docs;
+                  return Column(
+                    children: List.generate(docs.length, (index) {
+                      final data = docs[index].data() as Map<String, dynamic>;
+                      return TimelineItemWidget(
+                        time: data['timeSlot'] ?? '',
+                        title: data['userName'] ?? 'Unknown User',
+                        subtitle: 'Session',
+                        isCurrent: data['status'] == 'active',
+                        isLast: index == docs.length - 1,
+                      );
+                    }),
                   );
-                }),
+                },
               ),
             ),
           ),

@@ -242,11 +242,10 @@ class _SplashScreenState extends State<SplashScreen>
                             child: Transform.rotate(
                               angle: _logoRotation.value,
                               child: Container(
-                                width: 64,
-                                height: 64,
+                                width: 80,
+                                height: 80,
                                 decoration: BoxDecoration(
-                                  color: AppColors.accent,
-                                  borderRadius: BorderRadius.circular(16),
+                                  borderRadius: BorderRadius.circular(20),
                                   boxShadow: [
                                     BoxShadow(
                                       color: AppColors.accent.withValues(alpha: 0.4 * _logoOpacity.value),
@@ -255,15 +254,11 @@ class _SplashScreenState extends State<SplashScreen>
                                     ),
                                   ],
                                 ),
-                                child: Center(
-                                  child: Text(
-                                    'O',
-                                    style: AppTypography.displayLarge.copyWith(
-                                      fontSize: 30,
-                                      fontWeight: FontWeight.w900,
-                                      color: Colors.white,
-                                      height: 1,
-                                    ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(20),
+                                  child: Image.asset(
+                                    'assets/images/onyx_logo.png',
+                                    fit: BoxFit.cover,
                                   ),
                                 ),
                               ),

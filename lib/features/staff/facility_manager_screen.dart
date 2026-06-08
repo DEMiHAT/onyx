@@ -3,7 +3,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/section_header.dart';
 import '../../core/widgets/stat_card.dart';
-import '../../core/constants/mock_data.dart';
+import '../../core/services/booking_service.dart';
 import '../../models/models.dart';
 
 /// Facility Manager Dashboard — Monitor facilities, revenue, utilization, pricing.
@@ -47,33 +47,32 @@ class FacilityManagerScreen extends StatelessWidget {
             child: SectionHeader(title: 'All Facilities', padding: EdgeInsets.fromLTRB(16, 4, 16, 8)),
           ),
           SliverToBoxAdapter(
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Column(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.border))),
-                    child: Row(
-                      children: [
+            child: StreamBuilder<List<Facility>>(
+              stream: BookingService.instance.getFacilities(),
+              builder: (ctx, snap) {
+                if (!snap.hasData) return const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator(color: AppColors.accent)));
+                final facilities = snap.data!;
+                return Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 16),
+                  decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.border)),
+                  child: Column(children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.border))),
+                      child: Row(children: [
                         Expanded(flex: 3, child: Text('FACILITY', style: AppTypography.overline)),
                         Expanded(flex: 2, child: Text('STATUS', style: AppTypography.overline)),
                         Expanded(flex: 2, child: Text('REVENUE', style: AppTypography.overline, textAlign: TextAlign.right)),
                         const SizedBox(width: 40),
-                      ],
+                      ]),
                     ),
-                  ),
-                  ...MockData.facilities.asMap().entries.map((e) {
-                    final revenues = ['₹8.4K', '₹6.2K', '₹5.8K', '₹4.2K', '₹4.0K'];
-                    return _FacilityManageRow(facility: e.value, revenue: revenues[e.key]);
-                  }),
-                ],
-              ),
+                    ...facilities.asMap().entries.map((e) {
+                      final revenues = ['₹8.4K', '₹6.2K', '₹5.8K', '₹4.2K', '₹4.0K'];
+                      return _FacilityManageRow(facility: e.value, revenue: e.key < revenues.length ? revenues[e.key] : '₹0');
+                    }),
+                  ]),
+                );
+              },
             ),
           ),
 

@@ -3,7 +3,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/section_header.dart';
 import '../../core/widgets/stat_card.dart';
-import '../../core/constants/mock_data.dart';
+import '../../models/models.dart';
 
 /// Coaching Member Dashboard — For coaching students.
 /// Shows coach, batch, attendance, sessions, detailed fees, and progress.
@@ -146,33 +146,44 @@ class CoachingMemberScreen extends StatelessWidget {
               margin: const EdgeInsets.symmetric(horizontal: 16),
               decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.border)),
               child: Column(
-                children: MockData.coachingSessions.map((session) {
-                  return Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    decoration: BoxDecoration(
-                      border: session != MockData.coachingSessions.last ? const Border(bottom: BorderSide(color: AppColors.border)) : null,
-                    ),
-                    child: Row(children: [
-                      Container(
-                        width: 8, height: 8,
-                        decoration: BoxDecoration(shape: BoxShape.circle, color: session.attended ? AppColors.success : AppColors.textTertiary),
+                children: () {
+                  final sessions = <CoachingSession>[]; // TODO: Fetch from Firestore
+                  if (sessions.isEmpty) {
+                    return [
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Center(child: Text('No upcoming sessions', style: AppTypography.bodySmall)),
+                      )
+                    ];
+                  }
+                  return sessions.map((session) {
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        border: session != sessions.last ? const Border(bottom: BorderSide(color: AppColors.border)) : null,
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(session.date, style: AppTypography.titleSmall),
-                        Text('${session.time} · ${session.batchName}', style: AppTypography.bodySmall),
-                      ])),
-                      if (session.attended)
+                      child: Row(children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(color: AppColors.success.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(3)),
-                          child: Text('Present', style: AppTypography.labelSmall.copyWith(color: AppColors.success, fontSize: 10)),
-                        )
-                      else
-                        Text(session.time, style: AppTypography.monoSmall),
-                    ]),
-                  );
-                }).toList(),
+                          width: 8, height: 8,
+                          decoration: BoxDecoration(shape: BoxShape.circle, color: session.attended ? AppColors.success : AppColors.textTertiary),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(session.date, style: AppTypography.titleSmall),
+                          Text('${session.time} · ${session.batchName}', style: AppTypography.bodySmall),
+                        ])),
+                        if (session.attended)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(color: AppColors.success.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(3)),
+                            child: Text('Present', style: AppTypography.labelSmall.copyWith(color: AppColors.success, fontSize: 10)),
+                          )
+                        else
+                          Text(session.time, style: AppTypography.monoSmall),
+                      ]),
+                    );
+                  }).toList();
+                }(),
               ),
             ),
           ),
