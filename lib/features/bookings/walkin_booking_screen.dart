@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:uuid/uuid.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/section_header.dart';
+import '../bookings/booking_qr_screen.dart';
 
 /// Walk-In Booking Screen — For staff to register walk-in guests.
 /// Used by Coach, Facility Manager, and Admin instead of player booking.
@@ -182,35 +185,62 @@ class _WalkInBookingScreenState extends State<WalkInBookingScreen> {
     );
   }
 
-  void _showConfirmation(BuildContext context) {
+  Future<void> _showConfirmation(BuildContext context) async {
     final name = _nameController.text.trim().isEmpty ? 'Walk-in Guest' : _nameController.text.trim();
-    showModalBottomSheet(
-      context: context,
-      builder: (ctx) => Container(
-        padding: const EdgeInsets.all(24),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Container(width: 40, height: 4, decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(2))),
-          const SizedBox(height: 20),
-          Icon(Icons.check_circle_rounded, size: 48, color: AppColors.success),
-          const SizedBox(height: 16),
-          Text('Walk-In Registered', style: AppTypography.headlineMedium),
-          const SizedBox(height: 8),
-          Text('$name · $_selectedFacility', style: AppTypography.bodyMedium),
-          const SizedBox(height: 4),
-          Text('$_hours hr${_hours > 1 ? 's' : ''} · ₹$_totalPrice · $_paymentMethod', style: AppTypography.bodySmall),
-          const SizedBox(height: 20),
-          SizedBox(width: double.infinity, child: ElevatedButton(
-            onPressed: () { Navigator.pop(ctx); _nameController.clear(); _phoneController.text = '+91 '; },
-            child: const Text('Register Another'),
-          )),
-          const SizedBox(height: 8),
-          SizedBox(width: double.infinity, child: OutlinedButton(
-            onPressed: () { Navigator.pop(ctx); Navigator.pop(context); },
-            child: const Text('Done'),
-          )),
-          const SizedBox(height: 8),
-        ]),
-      ),
-    );
+    final checkInToken = const Uuid().v4();
+    final now = DateTime.now();
+    final startTime = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+    final endHour = now.hour + _hours;
+    final endTime = '${endHour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+    final date = '${now.day}/${now.month}/${now.year}';
+
+    // Map facility name to ID
+    final facilityMap = {'Court 1': 'court-1', 'Court 2': 'court-2', 'Court 3': 'court-3', 'Cricket Turf': 'turf', 'Cricket Nets': 'nets'};
+
+    try {
+      showDialog(context: context, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator(color: AppColors.accent)));
+
+      final result = await FirebaseFunctions.instance.httpsCallable('createBooking').call({
+        'facilityId': facilityMap[_selectedFacility] ?? 'court-1',
+        'date': date,
+        'startTime': startTime,
+        'endTime': endTime,
+        'courtNumber': _selectedFacility,
+        'amount': _totalPrice,
+        'paymentMode': _paymentMethod.toLowerCase(),
+        'checkInToken': checkInToken,
+        'guestName': name,
+      });
+
+      final bookingId = (result.data as Map<String, dynamic>)['bookingId'] ?? '';
+
+      // Mark as paid immediately for walk-ins (cash/UPI/card at desk)
+      await FirebaseFunctions.instance.httpsCallable('verifyPayment').call({
+        'paymentId': 'walkin_${_paymentMethod.toLowerCase()}_${DateTime.now().millisecondsSinceEpoch}',
+        'bookingId': bookingId,
+      });
+
+      if (!mounted) return;
+      Navigator.pop(context); // dismiss loading
+
+      // Navigate to QR screen (skip Razorpay for walk-ins)
+      Navigator.push(context, MaterialPageRoute(
+        builder: (_) => BookingQRScreen(
+          bookingId: bookingId,
+          checkInToken: checkInToken,
+          facilityName: _selectedFacility,
+          date: date,
+          timeSlot: '$startTime — $endTime',
+          amount: _totalPrice.toDouble(),
+          courtNumber: _selectedFacility,
+        ),
+      ));
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context); // dismiss loading
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error),
+      );
+    }
   }
 }

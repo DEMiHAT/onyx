@@ -146,6 +146,10 @@ exports.createBooking = onCall(async (request) => {
     amount: amount || 0,
     paymentMode: paymentMode || "online",
     paymentStatus: "pending",
+    checkInToken: request.data.checkInToken || null,
+    checkedInAt: null,
+    halfTimeNotified: false,
+    endTimeNotified: false,
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   };
@@ -895,3 +899,242 @@ exports.sendMembershipExpiryAlerts = onSchedule(
   }
 );
 
+// ════════════════════════════════════════════════════════════════
+// PAYMENT — Razorpay Verification
+// ════════════════════════════════════════════════════════════════
+
+/**
+ * Callable: Verify Razorpay payment and update booking payment status.
+ */
+exports.verifyPayment = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Login required.");
+
+  const { paymentId, bookingId } = request.data;
+  if (!paymentId) throw new HttpsError("invalid-argument", "Payment ID required.");
+
+  // Find the booking — either by explicit bookingId or by checkInToken
+  let bookingRef, bookingDoc;
+
+  if (bookingId) {
+    bookingRef = db.collection("bookings").doc(bookingId);
+    bookingDoc = await bookingRef.get();
+  }
+
+  if (!bookingDoc || !bookingDoc.exists) {
+    // Try finding by recent pending booking for this user
+    const q = await db.collection("bookings")
+      .where("userId", "==", request.auth.uid)
+      .where("paymentStatus", "==", "pending")
+      .orderBy("createdAt", "desc")
+      .limit(1)
+      .get();
+    if (q.empty) throw new HttpsError("not-found", "Booking not found.");
+    bookingRef = q.docs[0].ref;
+    bookingDoc = q.docs[0];
+  }
+
+  await bookingRef.update({
+    paymentStatus: "paid",
+    paymentId: paymentId,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+
+  return { success: true, bookingId: bookingRef.id };
+});
+
+// ════════════════════════════════════════════════════════════════
+// CHECK-IN — QR Code Scan
+// ════════════════════════════════════════════════════════════════
+
+/**
+ * Callable: Check in a booking via QR code scan (receptionist/manager).
+ * Validates the check-in token, activates the session, records timestamp.
+ */
+exports.checkInBooking = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Login required.");
+
+  // Only staff can check in
+  await assertRole(request.auth.uid, ["receptionist", "facilityManager", "admin", "coach"]);
+
+  const { checkInToken, bookingId } = request.data;
+  if (!checkInToken) throw new HttpsError("invalid-argument", "Check-in token required.");
+
+  // Find booking by token
+  let bookingRef, bookingData;
+
+  if (bookingId) {
+    bookingRef = db.collection("bookings").doc(bookingId);
+    const doc = await bookingRef.get();
+    if (doc.exists && doc.data().checkInToken === checkInToken) {
+      bookingData = doc.data();
+    }
+  }
+
+  if (!bookingData) {
+    const q = await db.collection("bookings")
+      .where("checkInToken", "==", checkInToken)
+      .where("status", "in", ["upcoming", "active"])
+      .limit(1)
+      .get();
+    if (q.empty) throw new HttpsError("not-found", "No booking found for this QR code.");
+    bookingRef = q.docs[0].ref;
+    bookingData = q.docs[0].data();
+  }
+
+  if (bookingData.status === "active") {
+    throw new HttpsError("already-exists", "This booking is already checked in.");
+  }
+
+  if (bookingData.status === "completed" || bookingData.status === "cancelled") {
+    throw new HttpsError("failed-precondition", `Booking is ${bookingData.status}.`);
+  }
+
+  // Calculate duration in minutes from start/end times
+  const startParts = bookingData.startTime.split(":");
+  const endParts = bookingData.endTime.split(":");
+  const startMin = parseInt(startParts[0]) * 60 + parseInt(startParts[1] || 0);
+  const endMin = parseInt(endParts[0]) * 60 + parseInt(endParts[1] || 0);
+  const durationMinutes = endMin - startMin;
+
+  // Activate the session
+  const now = Timestamp.now();
+  await bookingRef.update({
+    status: "active",
+    checkedInAt: now,
+    checkedInBy: request.auth.uid,
+    durationMinutes,
+    halfTimeNotified: false,
+    endTimeNotified: false,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+
+  // Get facility name
+  const facilityDoc = await db.collection("facilities").doc(bookingData.facilityId).get();
+  const facilityName = facilityDoc.exists ? facilityDoc.data().name : bookingData.facilityId;
+
+  // Notify the user their session has started
+  await sendNotification(
+    bookingData.userId,
+    "booking",
+    "Session Started! ⏱️",
+    `${facilityName} — ${bookingData.startTime} to ${bookingData.endTime} (${durationMinutes} min)`
+  );
+
+  // Update facility status to occupied
+  if (facilityDoc.exists) {
+    await db.collection("facilities").doc(bookingData.facilityId).update({
+      status: "occupied",
+      currentUser: bookingData.userId,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  }
+
+  return {
+    success: true,
+    facilityName,
+    startTime: bookingData.startTime,
+    endTime: bookingData.endTime,
+    durationMinutes,
+    courtNumber: bookingData.courtNumber || null,
+  };
+});
+
+// ════════════════════════════════════════════════════════════════
+// SESSION TIMERS — Half-time & End Notifications
+// ════════════════════════════════════════════════════════════════
+
+/**
+ * Scheduled: Check active bookings every 5 minutes.
+ * Sends configurable notifications at half-time and session end.
+ * Notification thresholds are read from config/settings in Firestore.
+ */
+exports.checkSessionTimers = onSchedule(
+  { schedule: "every 5 minutes", timeZone: "Asia/Kolkata" },
+  async () => {
+    const now = Date.now();
+
+    // Read configurable notification settings
+    const settingsDoc = await db.collection("config").doc("notifications").get();
+    const settings = settingsDoc.exists ? settingsDoc.data() : {};
+    const halfTimePercent = settings.halfTimePercent || 50; // default 50%
+    const endWarningMinutes = settings.endWarningMinutes || 0; // default 0 (exact end)
+
+    // Get all active bookings
+    const active = await db.collection("bookings")
+      .where("status", "==", "active")
+      .where("checkedInAt", "!=", null)
+      .get();
+
+    let halfTimeSent = 0;
+    let endTimeSent = 0;
+
+    for (const doc of active.docs) {
+      const data = doc.data();
+      if (!data.checkedInAt || !data.durationMinutes) continue;
+
+      const checkedInMs = data.checkedInAt.toMillis();
+      const totalMs = data.durationMinutes * 60 * 1000;
+      const elapsedMs = now - checkedInMs;
+      const elapsedPercent = (elapsedMs / totalMs) * 100;
+
+      // Get facility name for notification
+      const facilityDoc = await db.collection("facilities").doc(data.facilityId).get();
+      const facilityName = facilityDoc.exists ? facilityDoc.data().name : data.facilityId;
+
+      // Half-time notification
+      if (!data.halfTimeNotified && elapsedPercent >= halfTimePercent) {
+        const remaining = Math.ceil((totalMs - elapsedMs) / 60000);
+        await sendNotification(
+          data.userId,
+          "booking",
+          "⏳ Half Time!",
+          `${facilityName} — ${remaining} minutes remaining`
+        );
+        await doc.ref.update({ halfTimeNotified: true });
+        halfTimeSent++;
+      }
+
+      // End time notification
+      const endThresholdMs = totalMs - (endWarningMinutes * 60 * 1000);
+      if (!data.endTimeNotified && elapsedMs >= endThresholdMs) {
+        if (endWarningMinutes > 0) {
+          await sendNotification(
+            data.userId,
+            "booking",
+            "⏰ Session Ending Soon!",
+            `${facilityName} — ${endWarningMinutes} minutes left`
+          );
+        } else {
+          await sendNotification(
+            data.userId,
+            "booking",
+            "🔔 Session Over!",
+            `${facilityName} — Your booked time has ended. Please vacate the facility.`
+          );
+        }
+        await doc.ref.update({ endTimeNotified: true });
+        endTimeSent++;
+      }
+
+      // Auto-complete sessions that are 15 min past end time
+      if (elapsedMs >= totalMs + (15 * 60 * 1000)) {
+        await doc.ref.update({
+          status: "completed",
+          completedAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+
+        // Reset facility status
+        if (facilityDoc.exists) {
+          await db.collection("facilities").doc(data.facilityId).update({
+            status: "available",
+            currentUser: null,
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+        }
+      }
+    }
+
+    console.log(`[SessionTimer] Half-time: ${halfTimeSent}, End: ${endTimeSent}`);
+  }
+);

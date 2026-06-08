@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:uuid/uuid.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/section_header.dart';
+import '../../core/services/payment_service.dart';
 import '../../models/models.dart';
+import 'booking_qr_screen.dart';
 
 /// Cricket Nets Booking Screen — Multi-hour selection with pricing.
 class NetsBookingScreen extends StatefulWidget {
@@ -201,8 +205,8 @@ class _NetsBookingScreenState extends State<NetsBookingScreen> {
                   ]),
                   const SizedBox(height: 12),
                   SizedBox(width: double.infinity, child: ElevatedButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: Text('Confirm · $_totalHours hr${_totalHours > 1 ? 's' : ''} · ₹${_totalPrice.toInt()}'),
+                    onPressed: () => _processPayment(context),
+                    child: Text('Pay ₹${_totalPrice.toInt()}'),
                   )),
                 ]),
               ),
@@ -210,5 +214,46 @@ class _NetsBookingScreenState extends State<NetsBookingScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _processPayment(BuildContext context) async {
+    final sorted = _selectedSlots.toList()..sort();
+    final startTime = _slots[sorted.first].time;
+    final lastHour = int.parse(_slots[sorted.last].time.split(':')[0]) + 1;
+    final endTime = '${lastHour.toString().padLeft(2, '0')}:00';
+    final checkInToken = const Uuid().v4();
+
+    try {
+      showDialog(context: context, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator(color: AppColors.accent)));
+
+      final result = await FirebaseFunctions.instance.httpsCallable('createBooking').call({
+        'facilityId': 'nets', 'date': _dates[_selectedDateIndex],
+        'startTime': startTime, 'endTime': endTime,
+        'courtNumber': _lanes[_selectedLane],
+        'amount': _totalPrice, 'paymentMode': 'online', 'checkInToken': checkInToken,
+      });
+      final bookingId = (result.data as Map<String, dynamic>)['bookingId'] ?? '';
+      if (!mounted) return;
+      Navigator.pop(context);
+
+      PaymentService.instance.initiatePayment(
+        bookingId: bookingId, amountInPaise: (_totalPrice * 100).toInt(),
+        description: '$startTime — $endTime', facilityName: 'Cricket Nets',
+        onSuccess: (bid, pid) {
+          if (!mounted) return;
+          Navigator.push(context, MaterialPageRoute(builder: (_) => BookingQRScreen(
+            bookingId: bookingId, checkInToken: checkInToken,
+            facilityName: 'Cricket Nets', date: _dates[_selectedDateIndex],
+            timeSlot: _timeRange, amount: _totalPrice,
+            courtNumber: _lanes[_selectedLane],
+          )));
+        },
+        onFailure: (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Payment failed: $e'), backgroundColor: AppColors.error)); },
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error));
+    }
   }
 }

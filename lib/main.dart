@@ -5,6 +5,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'firebase_options.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/auth_service.dart';
+import 'core/services/payment_service.dart';
 import 'app.dart';
 
 Future<void> main() async {
@@ -22,6 +23,7 @@ Future<void> main() async {
   await AuthService.instance.initialize();
   await NotificationService.instance.initialize();
   await NotificationService.instance.checkInitialMessage();
+  PaymentService.instance.initialize();
 
   // Lock status bar to transparent for edge-to-edge dark theme
   SystemChrome.setSystemUIOverlayStyle(

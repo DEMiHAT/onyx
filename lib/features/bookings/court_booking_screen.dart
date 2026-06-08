@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:uuid/uuid.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/section_header.dart';
 import '../../core/constants/mock_data.dart';
+import '../../core/services/payment_service.dart';
 import '../../models/models.dart';
+import 'booking_qr_screen.dart';
 
 /// Court Booking Screen — Multi-hour badminton court booking.
 /// Court selection → Date → Multi-slot selection → Pricing → Confirmation.
@@ -275,18 +279,16 @@ class _CourtBookingScreenState extends State<CourtBookingScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (context) => Container(
+      builder: (ctx) => Container(
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(width: 40, height: 4, decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(2))),
             const SizedBox(height: 20),
-            Icon(Icons.check_circle_rounded, size: 48, color: AppColors.success),
-            const SizedBox(height: 16),
-            Text('Booking Confirmed!', style: AppTypography.headlineMedium),
+            Text('Confirm Booking', style: AppTypography.headlineMedium),
             const SizedBox(height: 8),
-            Text('Your court has been reserved', style: AppTypography.bodyMedium),
+            Text('Review your booking details', style: AppTypography.bodyMedium),
             const SizedBox(height: 20),
             Container(
               width: double.infinity,
@@ -297,15 +299,19 @@ class _CourtBookingScreenState extends State<CourtBookingScreen> {
                 _ConfirmRow(label: 'Date', value: _dates[_selectedDateIndex]),
                 _ConfirmRow(label: 'Time', value: _timeRange),
                 _ConfirmRow(label: 'Duration', value: '$_totalHours hour${_totalHours > 1 ? 's' : ''}'),
-                _ConfirmRow(label: 'Amount', value: '₹${_totalPrice.toInt()}'),
+                const Divider(color: AppColors.border, height: 16),
+                _ConfirmRow(label: 'Total', value: '₹${_totalPrice.toInt()}'),
               ]),
             ),
             const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () { Navigator.of(context).pop(); Navigator.of(context).pop(); },
-                child: const Text('Done'),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _processPayment(context);
+                },
+                child: Text('Pay ₹${_totalPrice.toInt()}'),
               ),
             ),
             const SizedBox(height: 8),
@@ -313,6 +319,79 @@ class _CourtBookingScreenState extends State<CourtBookingScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _processPayment(BuildContext context) async {
+    // 1. Create booking in Firestore via Cloud Function
+    final sorted = _selectedSlots.toList()..sort();
+    final startTime = MockData.badmintonTimeSlots[sorted.first].time;
+    final lastTime = MockData.badmintonTimeSlots[sorted.last].time;
+    final parts = lastTime.split(':');
+    final endHour = (int.parse(parts[0]) + 1).toString().padLeft(2, '0');
+    final endTime = '$endHour:00';
+    final checkInToken = const Uuid().v4();
+
+    try {
+      // Show loading
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator(color: AppColors.accent)),
+      );
+
+      final result = await FirebaseFunctions.instance
+          .httpsCallable('createBooking')
+          .call({
+        'facilityId': 'court-${_selectedCourt + 1}',
+        'date': _dates[_selectedDateIndex],
+        'startTime': startTime,
+        'endTime': endTime,
+        'courtNumber': _courts[_selectedCourt],
+        'amount': _totalPrice,
+        'paymentMode': 'online',
+        'checkInToken': checkInToken,
+      });
+
+      final data = result.data as Map<String, dynamic>;
+      final bookingId = data['bookingId'] ?? '';
+
+      if (!mounted) return;
+      Navigator.pop(context); // dismiss loading
+
+      // 2. Initiate Razorpay payment
+      PaymentService.instance.initiatePayment(
+        bookingId: bookingId,
+        amountInPaise: (_totalPrice * 100).toInt(),
+        description: '$startTime — $endTime · ${_dates[_selectedDateIndex]}',
+        facilityName: _courts[_selectedCourt],
+        onSuccess: (bid, paymentId) {
+          if (!mounted) return;
+          Navigator.push(context, MaterialPageRoute(
+            builder: (_) => BookingQRScreen(
+              bookingId: bookingId,
+              checkInToken: checkInToken,
+              facilityName: 'Badminton ${_courts[_selectedCourt]}',
+              date: _dates[_selectedDateIndex],
+              timeSlot: _timeRange,
+              amount: _totalPrice,
+              courtNumber: _courts[_selectedCourt],
+            ),
+          ));
+        },
+        onFailure: (error) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Payment failed: $error'), backgroundColor: AppColors.error),
+          );
+        },
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context); // dismiss loading
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Booking error: $e'), backgroundColor: AppColors.error),
+      );
+    }
   }
 }
 

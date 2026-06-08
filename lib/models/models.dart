@@ -8,6 +8,7 @@ library;
 enum FacilityType { badmintonCourt, cricketTurf, cricketNets }
 enum FacilityStatus { available, occupied, maintenance, reserved }
 enum BookingStatus { upcoming, active, completed, cancelled }
+enum PaymentStatus { pending, paid, failed, refunded }
 enum ExperienceLevel { beginner, intermediate, advanced, expert }
 enum MembershipType { monthly, quarterly, annual }
 enum MembershipStatus { active, expired, expiringSoon }

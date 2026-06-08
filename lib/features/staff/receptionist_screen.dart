@@ -6,6 +6,7 @@ import '../../core/widgets/section_header.dart';
 import '../../core/widgets/stat_card.dart';
 import '../../core/constants/mock_data.dart';
 import '../../models/models.dart';
+import 'qr_scanner_screen.dart';
 
 /// Receptionist / Front Desk Dashboard.
 /// Walk-in bookings, check-ins, payments, daily operations.
@@ -94,9 +95,9 @@ class ReceptionistScreen extends StatelessWidget {
                 mainAxisSpacing: 8,
                 crossAxisSpacing: 8,
                 childAspectRatio: 1.3,
-                children: const [
+                children: [
                   _ActionTile(icon: Icons.add_circle_outline_rounded, label: 'Walk-In\nBooking', color: AppColors.accent),
-                  _ActionTile(icon: Icons.qr_code_scanner_rounded, label: 'Scan\nCheck-In', color: AppColors.success),
+                  _ActionTile(icon: Icons.qr_code_scanner_rounded, label: 'Scan\nCheck-In', color: AppColors.success, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const QRScannerScreen()))),
                   _ActionTile(icon: Icons.exit_to_app_rounded, label: 'Check-Out', color: AppColors.warning),
                   _ActionTile(icon: Icons.payment_rounded, label: 'Collect\nPayment', color: AppColors.accent),
                   _ActionTile(icon: Icons.receipt_long_rounded, label: 'Issue\nReceipt', color: AppColors.textTertiary),
@@ -181,13 +182,14 @@ class _ActionTile extends StatelessWidget {
   final IconData icon;
   final String label;
   final Color color;
+  final VoidCallback? onTap;
 
-  const _ActionTile({required this.icon, required this.label, required this.color});
+  const _ActionTile({required this.icon, required this.label, required this.color, this.onTap});
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: () {},
+      onTap: onTap ?? () {},
       borderRadius: BorderRadius.circular(8),
       child: Container(
         decoration: BoxDecoration(
