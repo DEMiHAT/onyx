@@ -50,14 +50,16 @@ service cloud.firestore {
     match /users/{userId} {
       // Anyone authenticated can read their own profile
       // Staff can read all profiles
-      allow read: if isOwner(userId) || isStaff();
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isStaff());
+
+      // Users can create their own profile on sign-up
+      allow create: if isAuthenticated() && request.auth.uid == userId;
 
       // Users can update their own non-role fields
       allow update: if isOwner(userId)
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'createdAt']);
 
-      // Only admin can create users or change roles
-      allow create: if isAdmin();
+      // Only admin can delete users
       allow delete: if isAdmin();
     }
 

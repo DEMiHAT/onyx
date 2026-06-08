@@ -713,15 +713,19 @@ exports.onTaskCompleted = onDocumentUpdated(
 exports.seedDatabase = onCall(async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Login required.");
 
+  const { v4: uuidv4 } = require("uuid");
+
+  // ── Facilities ───────────────────────────────────────────────
   const facilities = [
     { id: "court-1", name: "Badminton Court 1", shortName: "Court 1", type: "badmintonCourt", status: "available" },
-    { id: "court-2", name: "Badminton Court 2", shortName: "Court 2", type: "badmintonCourt", status: "available" },
+    { id: "court-2", name: "Badminton Court 2", shortName: "Court 2", type: "badmintonCourt", status: "occupied" },
     { id: "court-3", name: "Badminton Court 3", shortName: "Court 3", type: "badmintonCourt", status: "available" },
     { id: "turf", name: "Cricket Turf", shortName: "Turf", type: "cricketTurf", status: "available" },
-    { id: "nets", name: "Cricket Nets", shortName: "Nets", type: "cricketNets", status: "available" },
+    { id: "nets", name: "Cricket Nets", shortName: "Nets", type: "cricketNets", status: "maintenance" },
   ];
 
-  const config = {
+  // ── Config ───────────────────────────────────────────────────
+  const pricingConfig = {
     pricing: {
       badmintonCourt: { offPeak: 400, peak: 600 },
       cricketTurf: { offPeak: 1000, peak: 1500 },
@@ -738,20 +742,238 @@ exports.seedDatabase = onCall(async (request) => {
     maxCancellationsPerMonth: 3,
   };
 
+  const notificationConfig = {
+    halfTimePercent: 50,
+    endWarningMinutes: 5,
+    enableWhatsApp: false,
+    enablePush: true,
+  };
+
+  // ── Test Users ───────────────────────────────────────────────
+  const testUsers = [
+    { email: "admin@onyx.com", password: "admin123", name: "Admin User", phone: "+919000000001", role: "admin" },
+    { email: "manager@onyx.com", password: "manager123", name: "Ravi Kumar", phone: "+919000000002", role: "facilityManager" },
+    { email: "coach@onyx.com", password: "coach123", name: "Coach Priya", phone: "+919000000003", role: "coach" },
+    { email: "reception@onyx.com", password: "reception123", name: "Anitha Desk", phone: "+919000000004", role: "receptionist" },
+    { email: "member1@onyx.com", password: "member123", name: "Arjun Sharma", phone: "+919000000005", role: "member" },
+    { email: "member2@onyx.com", password: "member123", name: "Sneha Patel", phone: "+919000000006", role: "member" },
+    { email: "coaching1@onyx.com", password: "coaching123", name: "Vikram Singh", phone: "+919000000007", role: "coachingMember" },
+    { email: "guest@onyx.com", password: "guest123", name: "Guest Player", phone: "+919000000008", role: "guest" },
+  ];
+
   const batch = db.batch();
 
+  // Seed facilities
   for (const facility of facilities) {
     batch.set(db.collection("facilities").doc(facility.id), {
       ...facility,
+      currentUser: null,
       createdAt: FieldValue.serverTimestamp(),
-    });
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
   }
 
-  batch.set(db.collection("config").doc("pricing"), config);
+  // Seed config
+  batch.set(db.collection("config").doc("pricing"), pricingConfig, { merge: true });
+  batch.set(db.collection("config").doc("notifications"), notificationConfig, { merge: true });
 
   await batch.commit();
-  return { success: true, message: "Database seeded." };
+
+  // ── Create test users via Admin SDK ──────────────────────────
+  const admin = require("firebase-admin");
+  const createdUsers = [];
+
+  for (const user of testUsers) {
+    try {
+      let userRecord;
+      try {
+        userRecord = await admin.auth().getUserByEmail(user.email);
+      } catch (e) {
+        userRecord = await admin.auth().createUser({
+          email: user.email,
+          password: user.password,
+          displayName: user.name,
+        });
+      }
+
+      // Create/update Firestore profile
+      await db.collection("users").doc(userRecord.uid).set({
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        level: "intermediate",
+        membershipType: user.role === "member" ? "monthly" : null,
+        membershipStatus: user.role === "member" ? "active" : null,
+        membershipExpiry: user.role === "member" ? "2026-12-31" : null,
+        totalSessions: Math.floor(Math.random() * 50) + 5,
+        totalHours: Math.floor(Math.random() * 100) + 10,
+        currentStreak: Math.floor(Math.random() * 15),
+        favoriteFacility: "court-1",
+        mostActiveDay: "Wednesday",
+        whatsappOptIn: true,
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+
+      createdUsers.push({ email: user.email, uid: userRecord.uid, role: user.role });
+    } catch (e) {
+      console.log(`[Seed] Skipped user ${user.email}: ${e.message}`);
+    }
+  }
+
+  // ── Seed Bookings (realistic data) ──────────────────────────
+  const today = new Date();
+  const memberUids = createdUsers.filter(u => u.role === "member" || u.role === "coachingMember" || u.role === "guest").map(u => u.uid);
+
+  if (memberUids.length > 0) {
+    const bookingBatch = db.batch();
+
+    const bookings = [
+      // Today — Active session
+      {
+        userId: memberUids[0] || request.auth.uid,
+        facilityId: "court-2", courtNumber: "Court 2",
+        date: formatDate(today), startTime: "09:00", endTime: "10:00",
+        status: "active", paymentStatus: "paid", paymentMode: "online",
+        amount: 400, checkInToken: uuidv4(),
+        checkedInAt: Timestamp.fromDate(new Date(today.getFullYear(), today.getMonth(), today.getDate(), 9, 0)),
+        durationMinutes: 60, halfTimeNotified: false, endTimeNotified: false,
+      },
+      // Today — Upcoming
+      {
+        userId: memberUids[1] || request.auth.uid,
+        facilityId: "court-1", courtNumber: "Court 1",
+        date: formatDate(today), startTime: "14:00", endTime: "15:00",
+        status: "upcoming", paymentStatus: "paid", paymentMode: "online",
+        amount: 400, checkInToken: uuidv4(),
+        checkedInAt: null, durationMinutes: 60, halfTimeNotified: false, endTimeNotified: false,
+      },
+      // Today — Upcoming (peak)
+      {
+        userId: memberUids[0] || request.auth.uid,
+        facilityId: "turf",
+        date: formatDate(today), startTime: "17:00", endTime: "19:00",
+        status: "upcoming", paymentStatus: "paid", paymentMode: "online",
+        amount: 3000, checkInToken: uuidv4(),
+        checkedInAt: null, durationMinutes: 120, halfTimeNotified: false, endTimeNotified: false,
+      },
+      // Today — Completed
+      {
+        userId: memberUids[2] || memberUids[0] || request.auth.uid,
+        facilityId: "court-3", courtNumber: "Court 3",
+        date: formatDate(today), startTime: "06:00", endTime: "07:00",
+        status: "completed", paymentStatus: "paid", paymentMode: "cash",
+        amount: 400, checkInToken: uuidv4(),
+        checkedInAt: Timestamp.fromDate(new Date(today.getFullYear(), today.getMonth(), today.getDate(), 6, 0)),
+        durationMinutes: 60, halfTimeNotified: true, endTimeNotified: true,
+      },
+      // Yesterday — Completed
+      {
+        userId: memberUids[0] || request.auth.uid,
+        facilityId: "court-1", courtNumber: "Court 1",
+        date: formatDate(addDays(today, -1)), startTime: "18:00", endTime: "19:00",
+        status: "completed", paymentStatus: "paid", paymentMode: "online",
+        amount: 600, checkInToken: uuidv4(),
+        checkedInAt: Timestamp.fromDate(addDays(new Date(today.getFullYear(), today.getMonth(), today.getDate(), 18, 0), -1)),
+        durationMinutes: 60, halfTimeNotified: true, endTimeNotified: true,
+      },
+      // Yesterday — Cancelled
+      {
+        userId: memberUids[1] || request.auth.uid,
+        facilityId: "turf",
+        date: formatDate(addDays(today, -1)), startTime: "10:00", endTime: "12:00",
+        status: "cancelled", paymentStatus: "refunded", paymentMode: "online",
+        amount: 2000, checkInToken: uuidv4(),
+        checkedInAt: null, durationMinutes: 120, halfTimeNotified: false, endTimeNotified: false,
+      },
+      // Tomorrow — Upcoming
+      {
+        userId: memberUids[0] || request.auth.uid,
+        facilityId: "court-1", courtNumber: "Court 1",
+        date: formatDate(addDays(today, 1)), startTime: "08:00", endTime: "09:00",
+        status: "upcoming", paymentStatus: "paid", paymentMode: "online",
+        amount: 400, checkInToken: uuidv4(),
+        checkedInAt: null, durationMinutes: 60, halfTimeNotified: false, endTimeNotified: false,
+      },
+      // Tomorrow — Upcoming Nets
+      {
+        userId: memberUids[1] || request.auth.uid,
+        facilityId: "nets", courtNumber: "Lane 1",
+        date: formatDate(addDays(today, 1)), startTime: "16:00", endTime: "17:00",
+        status: "upcoming", paymentStatus: "paid", paymentMode: "upi",
+        amount: 500, checkInToken: uuidv4(),
+        checkedInAt: null, durationMinutes: 60, halfTimeNotified: false, endTimeNotified: false,
+      },
+      // 2 days ago — Completed
+      {
+        userId: memberUids[2] || memberUids[0] || request.auth.uid,
+        facilityId: "court-2", courtNumber: "Court 2",
+        date: formatDate(addDays(today, -2)), startTime: "07:00", endTime: "09:00",
+        status: "completed", paymentStatus: "paid", paymentMode: "online",
+        amount: 800, checkInToken: uuidv4(),
+        checkedInAt: Timestamp.fromDate(addDays(new Date(today.getFullYear(), today.getMonth(), today.getDate(), 7, 0), -2)),
+        durationMinutes: 120, halfTimeNotified: true, endTimeNotified: true,
+      },
+      // 3 days ago — Completed turf
+      {
+        userId: memberUids[0] || request.auth.uid,
+        facilityId: "turf",
+        date: formatDate(addDays(today, -3)), startTime: "17:00", endTime: "19:00",
+        status: "completed", paymentStatus: "paid", paymentMode: "online",
+        amount: 3000, checkInToken: uuidv4(),
+        checkedInAt: Timestamp.fromDate(addDays(new Date(today.getFullYear(), today.getMonth(), today.getDate(), 17, 0), -3)),
+        durationMinutes: 120, halfTimeNotified: true, endTimeNotified: true,
+      },
+      // Day after tomorrow — Upcoming
+      {
+        userId: memberUids[1] || request.auth.uid,
+        facilityId: "court-3", courtNumber: "Court 3",
+        date: formatDate(addDays(today, 2)), startTime: "19:00", endTime: "20:00",
+        status: "upcoming", paymentStatus: "paid", paymentMode: "online",
+        amount: 600, checkInToken: uuidv4(),
+        checkedInAt: null, durationMinutes: 60, halfTimeNotified: false, endTimeNotified: false,
+      },
+      // Walk-in today
+      {
+        userId: memberUids[2] || memberUids[0] || request.auth.uid,
+        facilityId: "court-1", courtNumber: "Court 1",
+        date: formatDate(today), startTime: "11:00", endTime: "12:00",
+        status: "completed", paymentStatus: "paid", paymentMode: "cash",
+        amount: 400, checkInToken: uuidv4(), guestName: "Walk-in Ravi",
+        checkedInAt: Timestamp.fromDate(new Date(today.getFullYear(), today.getMonth(), today.getDate(), 11, 0)),
+        durationMinutes: 60, halfTimeNotified: true, endTimeNotified: true,
+      },
+    ];
+
+    for (const booking of bookings) {
+      const ref = db.collection("bookings").doc();
+      bookingBatch.set(ref, {
+        ...booking,
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    }
+
+    await bookingBatch.commit();
+  }
+
+  return {
+    success: true,
+    message: `Seeded: ${facilities.length} facilities, ${createdUsers.length} users, 12 bookings, config docs.`,
+    users: createdUsers.map(u => `${u.email} (${u.role})`),
+  };
 });
+
+function formatDate(d) {
+  return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
+}
+
+function addDays(date, days) {
+  const result = new Date(date);
+  result.setDate(result.getDate() + days);
+  return result;
+}
 
 // ════════════════════════════════════════════════════════════════
 // WHATSAPP — Callable Endpoints
