@@ -11,29 +11,29 @@ class MockData {
       id: 'court-1', name: 'Badminton Court 1', shortName: 'Court 1',
       type: FacilityType.badmintonCourt, status: FacilityStatus.occupied,
       currentUser: 'Arjun Mehta', timeRemainingMinutes: 12,
-      queueLength: 2, nextAvailableTime: '6:42 PM', bookingEndTime: '6:30 PM',
+      nextAvailableTime: '6:42 PM', bookingEndTime: '6:30 PM',
     ),
     Facility(
       id: 'court-2', name: 'Badminton Court 2', shortName: 'Court 2',
       type: FacilityType.badmintonCourt, status: FacilityStatus.available,
-      queueLength: 0, nextAvailableTime: 'Now',
+      nextAvailableTime: 'Now',
     ),
     Facility(
       id: 'court-3', name: 'Badminton Court 3', shortName: 'Court 3',
       type: FacilityType.badmintonCourt, status: FacilityStatus.occupied,
       currentUser: 'Priya Sharma', timeRemainingMinutes: 28,
-      queueLength: 1, nextAvailableTime: '7:08 PM', bookingEndTime: '6:58 PM',
+      nextAvailableTime: '7:08 PM', bookingEndTime: '6:58 PM',
     ),
     Facility(
       id: 'nets', name: 'Cricket Nets', shortName: 'Nets',
       type: FacilityType.cricketNets, status: FacilityStatus.occupied,
       currentUser: 'Rahul Verma', timeRemainingMinutes: 45,
-      queueLength: 0, nextAvailableTime: '7:15 PM', bookingEndTime: '7:15 PM',
+      nextAvailableTime: '7:15 PM', bookingEndTime: '7:15 PM',
     ),
     Facility(
       id: 'turf', name: 'Cricket Turf', shortName: 'Turf',
       type: FacilityType.cricketTurf, status: FacilityStatus.available,
-      queueLength: 0, nextAvailableTime: 'Now',
+      nextAvailableTime: 'Now',
     ),
   ];
 
@@ -83,13 +83,7 @@ class MockData {
     TimeSlot(time: '9:00 PM', isAvailable: true, price: 500),
   ];
 
-  // ── Queue ────────────────────────────────────────────────────
 
-  static const QueueEntry currentQueue = QueueEntry(
-    position: 2, facilityName: 'Court 3',
-    estimatedWaitMinutes: 18, peopleAhead: 1,
-    expectedAvailability: '7:08 PM', status: 'Waiting',
-  );
 
   // ── User Profile ─────────────────────────────────────────────
 
@@ -162,7 +156,7 @@ class MockData {
 
   static const List<NotificationItem> notifications = [
     NotificationItem(id: 'n001', type: NotificationType.booking, title: 'Booking Confirmed', body: 'Court 1 — Today, 7:00 PM', timestamp: '2 min ago'),
-    NotificationItem(id: 'n002', type: NotificationType.queue, title: 'Queue Update', body: 'You moved to position #2 for Court 3', timestamp: '5 min ago'),
+
     NotificationItem(id: 'n003', type: NotificationType.facility, title: 'Court 2 Available', body: 'Court 2 is now free. Book now!', timestamp: '12 min ago'),
     NotificationItem(id: 'n004', type: NotificationType.tournament, title: 'Tournament Registration Open', body: 'ONYX Summer Smash 2026 — 4 spots left', timestamp: '1 hour ago'),
     NotificationItem(id: 'n005', type: NotificationType.membership, title: 'Membership Renewal', body: 'Your quarterly plan expires Aug 15', timestamp: '3 hours ago', isRead: true),

@@ -11,7 +11,7 @@ enum BookingStatus { upcoming, active, completed, cancelled }
 enum ExperienceLevel { beginner, intermediate, advanced, expert }
 enum MembershipType { monthly, quarterly, annual }
 enum MembershipStatus { active, expired, expiringSoon }
-enum NotificationType { booking, queue, facility, membership, tournament, coaching, matchFound, general }
+enum NotificationType { booking, facility, membership, tournament, coaching, matchFound, general }
 enum PlayFormat { singles, doubles }
 enum SportType { badminton, cricket }
 enum UserRole { guest, coachingMember, coach, receptionist, facilityManager, admin, tournamentOrganizer, housekeeping }
@@ -26,14 +26,14 @@ class Facility {
   final FacilityStatus status;
   final String? currentUser;
   final int? timeRemainingMinutes;
-  final int queueLength;
+
   final String? nextAvailableTime;
   final String? bookingEndTime;
 
   const Facility({
     required this.id, required this.name, required this.shortName,
     required this.type, required this.status, this.currentUser,
-    this.timeRemainingMinutes, this.queueLength = 0,
+    this.timeRemainingMinutes,
     this.nextAvailableTime, this.bookingEndTime,
   });
 }
@@ -69,22 +69,7 @@ class TimeSlot {
   const TimeSlot({required this.time, this.isAvailable = true, this.price, this.isPeak = false});
 }
 
-// ── Queue Entry ────────────────────────────────────────────────
 
-class QueueEntry {
-  final int position;
-  final String facilityName;
-  final int estimatedWaitMinutes;
-  final int peopleAhead;
-  final String expectedAvailability;
-  final String status;
-
-  const QueueEntry({
-    required this.position, required this.facilityName,
-    required this.estimatedWaitMinutes, required this.peopleAhead,
-    required this.expectedAvailability, required this.status,
-  });
-}
 
 // ── User Profile ───────────────────────────────────────────────
 

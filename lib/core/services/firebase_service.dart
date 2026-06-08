@@ -128,25 +128,6 @@ class FirebaseService {
     return result.data['bookingId'];
   }
 
-  // ── Queue ─────────────────────────────────────────────────────
-
-  Future<int> joinQueue(String facilityId) async {
-    final result = await _functions.httpsCallable('joinQueue').call({
-      'facilityId': facilityId,
-    });
-    return result.data['position'];
-  }
-
-  Future<void> leaveQueue(String facilityId) =>
-      _functions.httpsCallable('leaveQueue').call({'facilityId': facilityId});
-
-  Stream<QuerySnapshot> queueStream(String facilityId) =>
-      _db.collection('queues').doc(facilityId)
-          .collection('entries')
-          .where('status', isEqualTo: 'waiting')
-          .orderBy('joinedAt')
-          .snapshots();
-
   // ── Coaching & Attendance ─────────────────────────────────────
 
   Stream<QuerySnapshot> batchesStream(String coachId) =>

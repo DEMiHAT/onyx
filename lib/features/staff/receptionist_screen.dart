@@ -8,7 +8,7 @@ import '../../core/constants/mock_data.dart';
 import '../../models/models.dart';
 
 /// Receptionist / Front Desk Dashboard.
-/// Walk-in bookings, check-ins, queue management, payments, daily operations.
+/// Walk-in bookings, check-ins, payments, daily operations.
 class ReceptionistScreen extends StatelessWidget {
   const ReceptionistScreen({super.key});
 
@@ -100,7 +100,7 @@ class ReceptionistScreen extends StatelessWidget {
                   _ActionTile(icon: Icons.exit_to_app_rounded, label: 'Check-Out', color: AppColors.warning),
                   _ActionTile(icon: Icons.payment_rounded, label: 'Collect\nPayment', color: AppColors.accent),
                   _ActionTile(icon: Icons.receipt_long_rounded, label: 'Issue\nReceipt', color: AppColors.textTertiary),
-                  _ActionTile(icon: Icons.queue_rounded, label: 'Manage\nQueue', color: AppColors.warning),
+
                 ],
               ),
             ),
@@ -123,8 +123,7 @@ class ReceptionistScreen extends StatelessWidget {
                   _ActivityRow(time: '6:28 PM', event: 'Check-In', name: 'Arjun Mehta', detail: 'Court 1 · Booking BK001', icon: Icons.login_rounded, color: AppColors.success),
                   _ActivityRow(time: '6:22 PM', event: 'Payment', name: 'Priya Sharma', detail: '₹600 · Cash', icon: Icons.payments_rounded, color: AppColors.accent),
                   _ActivityRow(time: '6:15 PM', event: 'Walk-In', name: 'Guest #08', detail: 'Court 2 · Walk-in booking', icon: Icons.directions_walk_rounded, color: AppColors.warning),
-                  _ActivityRow(time: '6:02 PM', event: 'Check-Out', name: 'Vikram Patel', detail: 'Court 1 · 58 min', icon: Icons.exit_to_app_rounded, color: AppColors.textTertiary),
-                  _ActivityRow(time: '5:58 PM', event: 'Queue Move', name: 'Kavitha Nair', detail: '#2 → #1 for Court 3', icon: Icons.queue_rounded, color: AppColors.warning, isLast: true),
+                  _ActivityRow(time: '6:02 PM', event: 'Check-Out', name: 'Vikram Patel', detail: 'Court 1 · 58 min', icon: Icons.exit_to_app_rounded, color: AppColors.textTertiary, isLast: true),
                 ],
               ),
             ),

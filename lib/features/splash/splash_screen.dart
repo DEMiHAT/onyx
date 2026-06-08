@@ -2,6 +2,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
+import '../../core/services/auth_service.dart';
+import '../../app.dart';
 import '../auth/login_screen.dart';
 
 /// Splash Screen — Dramatic cinematic ONYX intro with multi-phase animation.
@@ -116,22 +118,25 @@ class _SplashScreenState extends State<SplashScreen>
       if (mounted) _pulseController.repeat(reverse: true);
     });
 
-    // Navigate
+    // Navigate based on auth state
     Future.delayed(const Duration(milliseconds: 3800), () {
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          PageRouteBuilder(
-            pageBuilder: (_, __, ___) => const LoginScreen(),
-            transitionsBuilder: (_, animation, __, child) {
-              return FadeTransition(
-                opacity: CurvedAnimation(parent: animation, curve: Curves.easeInOut),
-                child: child,
-              );
-            },
-            transitionDuration: const Duration(milliseconds: 600),
-          ),
-        );
-      }
+      if (!mounted) return;
+      final auth = AuthService.instance;
+      final Widget destination = auth.isAuthenticated
+          ? OnyxShell(role: auth.role)
+          : const LoginScreen();
+      Navigator.of(context).pushReplacement(
+        PageRouteBuilder(
+          pageBuilder: (_, __, ___) => destination,
+          transitionsBuilder: (_, animation, __, child) {
+            return FadeTransition(
+              opacity: CurvedAnimation(parent: animation, curve: Curves.easeInOut),
+              child: child,
+            );
+          },
+          transitionDuration: const Duration(milliseconds: 600),
+        ),
+      );
     });
   }
 

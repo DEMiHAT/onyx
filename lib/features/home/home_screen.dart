@@ -9,7 +9,7 @@ import '../facility/facility_detail_screen.dart';
 import '../bookings/court_booking_screen.dart';
 import '../bookings/turf_booking_screen.dart';
 import '../bookings/nets_booking_screen.dart';
-import '../queue/queue_screen.dart';
+
 import '../notifications/notifications_screen.dart';
 
 /// Home Screen — Live Operations Dashboard
@@ -24,7 +24,7 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final user = MockData.currentUser;
     final availableCount = MockData.facilities.where((f) => f.status == FacilityStatus.available).length;
-    final totalQueue = MockData.facilities.fold(0, (sum, f) => sum + f.queueLength);
+
 
     return Scaffold(
       body: CustomScrollView(
@@ -70,8 +70,6 @@ class HomeScreen extends StatelessWidget {
               child: Row(children: [
                 _MiniStat(label: 'Open', value: '$availableCount', color: AppColors.success),
                 const SizedBox(width: 8),
-                _MiniStat(label: 'In Queue', value: '$totalQueue', color: AppColors.warning),
-                const SizedBox(width: 8),
                 _MiniStat(label: 'Streak', value: '${user.currentStreak}d', color: AppColors.accent),
                 const SizedBox(width: 8),
                 _MiniStat(label: 'Sessions', value: '${user.totalSessions}', color: AppColors.textTertiary),
@@ -114,8 +112,7 @@ class HomeScreen extends StatelessWidget {
                 _QuickAction(icon: Icons.sports_cricket_rounded, label: 'Turf', color: AppColors.cricketTurf, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TurfBookingScreen()))),
                 const SizedBox(width: 8),
                 _QuickAction(icon: Icons.sports_baseball_rounded, label: 'Nets', color: AppColors.cricketNets, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NetsBookingScreen()))),
-                const SizedBox(width: 8),
-                _QuickAction(icon: Icons.queue_rounded, label: 'Queue', color: AppColors.warning, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const QueueScreen()))),
+
               ]),
             ),
           ),
@@ -248,14 +245,7 @@ class _FacilityTile extends StatelessWidget {
               textAlign: TextAlign.right,
             ),
           ),
-          if (facility.queueLength > 0) ...[
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-              decoration: BoxDecoration(color: AppColors.warningMuted, borderRadius: BorderRadius.circular(4)),
-              child: Text('Q${facility.queueLength}', style: AppTypography.labelSmall.copyWith(color: AppColors.warning, fontSize: 10)),
-            ),
-          ],
+
         ]),
       ),
     );

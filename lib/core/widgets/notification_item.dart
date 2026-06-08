@@ -16,7 +16,6 @@ class NotificationItemWidget extends StatelessWidget {
 
   (IconData, Color) get _typeConfig => switch (notification.type) {
     NotificationType.booking => (Icons.calendar_today_rounded, AppColors.accent),
-    NotificationType.queue => (Icons.queue_rounded, AppColors.warning),
     NotificationType.facility => (Icons.sports_tennis_rounded, AppColors.success),
     NotificationType.membership => (Icons.card_membership_rounded, AppColors.accent),
     NotificationType.tournament => (Icons.emoji_events_rounded, AppColors.warning),

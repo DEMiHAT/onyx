@@ -92,7 +92,6 @@ class AdminScreen extends StatelessWidget {
               child: Column(
                 children: const [
                   _ConfigItem(icon: Icons.calendar_today_rounded, label: 'Booking Rules', value: '60 min default'),
-                  _ConfigItem(icon: Icons.queue_rounded, label: 'Queue Rules', value: 'Max 5 per facility'),
                   _ConfigItem(icon: Icons.attach_money_rounded, label: 'Pricing Config', value: 'Last updated Jun 1'),
                   _ConfigItem(icon: Icons.card_membership_rounded, label: 'Membership Plans', value: '3 active plans'),
                   _ConfigItem(icon: Icons.notifications_rounded, label: 'Notification Templates', value: 'WhatsApp + Push'),

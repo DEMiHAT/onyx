@@ -130,11 +130,11 @@ class MembershipScreen extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Column(
                 children: const [
-                  _PlanCard(name: 'Monthly', price: '₹3,500', period: '/month', features: ['All facility access', 'Basic queue priority', 'Community features'], isSelected: false),
+                  _PlanCard(name: 'Monthly', price: '₹3,500', period: '/month', features: ['All facility access', 'Booking priority', 'Community features'], isSelected: false),
                   SizedBox(height: 8),
-                  _PlanCard(name: 'Quarterly', price: '₹8,500', period: '/quarter', features: ['All facility access', 'Priority queue', 'Coaching discount 10%', 'Tournament entry discount'], isSelected: true),
+                  _PlanCard(name: 'Quarterly', price: '₹8,500', period: '/quarter', features: ['All facility access', 'Priority booking', 'Coaching discount 10%', 'Tournament entry discount'], isSelected: true),
                   SizedBox(height: 8),
-                  _PlanCard(name: 'Annual', price: '₹28,000', period: '/year', features: ['All facility access', 'Top queue priority', 'Coaching discount 20%', 'Free tournament entries', 'Guest passes (4/month)'], isSelected: false),
+                  _PlanCard(name: 'Annual', price: '₹28,000', period: '/year', features: ['All facility access', 'Top booking priority', 'Coaching discount 20%', 'Free tournament entries', 'Guest passes (4/month)'], isSelected: false),
                 ],
               ),
             ),

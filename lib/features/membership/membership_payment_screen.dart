@@ -16,8 +16,8 @@ class _MembershipPaymentScreenState extends State<MembershipPaymentScreen> {
   int _selectedPlan = 1; // default to quarterly
 
   final _plans = const [
-    _Plan(name: 'Monthly', price: 2499, duration: '1 month', savings: '', features: ['Court access', 'Queue priority', 'Basic analytics']),
-    _Plan(name: 'Quarterly', price: 5999, duration: '3 months', savings: 'Save ₹1,498', features: ['Court access', 'Queue priority', 'Full analytics', 'Open play priority', 'Member-only slots']),
+    _Plan(name: 'Monthly', price: 2499, duration: '1 month', savings: '', features: ['Court access', 'Booking priority', 'Basic analytics']),
+    _Plan(name: 'Quarterly', price: 5999, duration: '3 months', savings: 'Save ₹1,498', features: ['Court access', 'Priority booking', 'Full analytics', 'Open play priority', 'Member-only slots']),
     _Plan(name: 'Annual', price: 19999, duration: '12 months', savings: 'Save ₹9,989', features: ['All quarterly benefits', '2 guest passes/month', 'Tournament discounts', 'Coaching discounts', 'Priority support']),
   ];
 

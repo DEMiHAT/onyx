@@ -244,7 +244,7 @@ class ProfileScreen extends StatelessWidget {
                           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                             Text('Become a Member', style: AppTypography.titleSmall),
                             const SizedBox(height: 2),
-                            Text('Unlock member-only slots, priority queues, and more', style: AppTypography.bodySmall),
+                            Text('Unlock member-only slots, exclusive discounts, and more', style: AppTypography.bodySmall),
                           ])),
                         ]),
                         const SizedBox(height: 12),
@@ -252,7 +252,7 @@ class ProfileScreen extends StatelessWidget {
                           width: double.infinity,
                           child: ElevatedButton(
                             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MembershipPaymentScreen())),
-                            child: const Text('View Plans & Subscribe'),
+                            child: const Text('View Plans & Join'),
                           ),
                         ),
                       ]),

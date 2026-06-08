@@ -113,26 +113,6 @@ service cloud.firestore {
     }
 
     // ════════════════════════════════════════════════════════════
-    // QUEUE
-    // ════════════════════════════════════════════════════════════
-
-    match /queues/{facilityId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
-
-      match /entries/{entryId} {
-        allow read: if isAuthenticated();
-
-        // Users can join/leave queue for themselves
-        allow create: if isAuthenticated()
-          && request.resource.data.userId == request.auth.uid;
-
-        allow update, delete: if isAuthenticated()
-          && (resource.data.userId == request.auth.uid || isStaff());
-      }
-    }
-
-    // ════════════════════════════════════════════════════════════
     // COACHING
     // ════════════════════════════════════════════════════════════
 

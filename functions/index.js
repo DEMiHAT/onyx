@@ -2,7 +2,7 @@
  * ONYX Sports Facility — Cloud Functions
  *
  * Business logic for bookings, attendance, payments,
- * notifications, leaderboard aggregation, and queue management.
+ * notifications, leaderboard aggregation, and facility management.
  */
 
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
@@ -11,6 +11,8 @@ const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue, Timestamp } = require("firebase-admin/firestore");
 const { getAuth } = require("firebase-admin/auth");
+const { sendMultiChannelNotification, sendPushToUser, sendPushToTopic } = require("./notifications");
+const { sendTemplateMessage, broadcastTemplate, normalizePhoneNumber } = require("./whatsapp");
 
 initializeApp();
 const db = getFirestore();
@@ -32,14 +34,15 @@ async function assertRole(uid, allowedRoles) {
   return role;
 }
 
-async function sendNotification(userId, type, title, body) {
-  await db.collection("notifications").add({
+async function sendNotification(userId, type, title, body, options = {}) {
+  await sendMultiChannelNotification({
     userId,
     type,
     title,
     body,
-    isRead: false,
-    createdAt: FieldValue.serverTimestamp(),
+    whatsappTemplate: options.whatsappTemplate || null,
+    whatsappParams: options.whatsappParams || {},
+    data: options.data || {},
   });
 }
 
@@ -231,87 +234,6 @@ exports.createWalkInBooking = onCall(async (request) => {
 
   const ref = await db.collection("walkinBookings").add(walkin);
   return { success: true, bookingId: ref.id };
-});
-
-// ════════════════════════════════════════════════════════════════
-// QUEUE MANAGEMENT
-// ════════════════════════════════════════════════════════════════
-
-/**
- * Callable: Join a facility queue.
- */
-exports.joinQueue = onCall(async (request) => {
-  if (!request.auth) throw new HttpsError("unauthenticated", "Login required.");
-
-  const { facilityId } = request.data;
-  const queueRef = db.collection("queues").doc(facilityId).collection("entries");
-
-  // Check if already in queue
-  const existing = await queueRef
-    .where("userId", "==", request.auth.uid)
-    .where("status", "==", "waiting")
-    .get();
-
-  if (!existing.empty) {
-    throw new HttpsError("already-exists", "Already in queue.");
-  }
-
-  // Get current position
-  const waiting = await queueRef.where("status", "==", "waiting").get();
-  const position = waiting.size + 1;
-
-  await queueRef.add({
-    userId: request.auth.uid,
-    position,
-    status: "waiting",
-    estimatedWaitMinutes: position * 15,
-    joinedAt: FieldValue.serverTimestamp(),
-  });
-
-  // Update facility queue count
-  await db.collection("facilities").doc(facilityId).update({
-    queueLength: FieldValue.increment(1),
-  });
-
-  await sendNotification(
-    request.auth.uid,
-    "queue",
-    "Joined Queue",
-    `You are #${position} in the queue.`
-  );
-
-  return { success: true, position };
-});
-
-/**
- * Callable: Leave a facility queue.
- */
-exports.leaveQueue = onCall(async (request) => {
-  if (!request.auth) throw new HttpsError("unauthenticated", "Login required.");
-
-  const { facilityId } = request.data;
-  const queueRef = db.collection("queues").doc(facilityId).collection("entries");
-
-  const entries = await queueRef
-    .where("userId", "==", request.auth.uid)
-    .where("status", "==", "waiting")
-    .get();
-
-  if (entries.empty) {
-    throw new HttpsError("not-found", "Not in queue.");
-  }
-
-  const batch = db.batch();
-  entries.forEach((doc) => {
-    batch.update(doc.ref, { status: "left", leftAt: FieldValue.serverTimestamp() });
-  });
-  await batch.commit();
-
-  await db.collection("facilities").doc(facilityId).update({
-    queueLength: FieldValue.increment(-1),
-  });
-
-  return { success: true };
 });
 
 // ════════════════════════════════════════════════════════════════
@@ -788,11 +710,11 @@ exports.seedDatabase = onCall(async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Login required.");
 
   const facilities = [
-    { id: "court-1", name: "Badminton Court 1", shortName: "Court 1", type: "badmintonCourt", status: "available", queueLength: 0 },
-    { id: "court-2", name: "Badminton Court 2", shortName: "Court 2", type: "badmintonCourt", status: "available", queueLength: 0 },
-    { id: "court-3", name: "Badminton Court 3", shortName: "Court 3", type: "badmintonCourt", status: "available", queueLength: 0 },
-    { id: "turf", name: "Cricket Turf", shortName: "Turf", type: "cricketTurf", status: "available", queueLength: 0 },
-    { id: "nets", name: "Cricket Nets", shortName: "Nets", type: "cricketNets", status: "available", queueLength: 0 },
+    { id: "court-1", name: "Badminton Court 1", shortName: "Court 1", type: "badmintonCourt", status: "available" },
+    { id: "court-2", name: "Badminton Court 2", shortName: "Court 2", type: "badmintonCourt", status: "available" },
+    { id: "court-3", name: "Badminton Court 3", shortName: "Court 3", type: "badmintonCourt", status: "available" },
+    { id: "turf", name: "Cricket Turf", shortName: "Turf", type: "cricketTurf", status: "available" },
+    { id: "nets", name: "Cricket Nets", shortName: "Nets", type: "cricketNets", status: "available" },
   ];
 
   const config = {
@@ -826,3 +748,150 @@ exports.seedDatabase = onCall(async (request) => {
   await batch.commit();
   return { success: true, message: "Database seeded." };
 });
+
+// ════════════════════════════════════════════════════════════════
+// WHATSAPP — Callable Endpoints
+// ════════════════════════════════════════════════════════════════
+
+exports.sendWhatsAppBookingConfirmation = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Login required.");
+  const phone = normalizePhoneNumber(request.data.phoneNumber);
+  if (!phone) throw new HttpsError("invalid-argument", "Invalid phone.");
+  return sendTemplateMessage(phone, "bookingConfirmation", request.data);
+});
+
+exports.sendWhatsAppBookingReminder = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Login required.");
+  const phone = normalizePhoneNumber(request.data.phoneNumber);
+  if (!phone) throw new HttpsError("invalid-argument", "Invalid phone.");
+  return sendTemplateMessage(phone, "bookingReminder", request.data);
+});
+
+exports.sendWhatsAppBookingCancellation = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Login required.");
+  const phone = normalizePhoneNumber(request.data.phoneNumber);
+  if (!phone) throw new HttpsError("invalid-argument", "Invalid phone.");
+  return sendTemplateMessage(phone, "bookingCancellation", request.data);
+});
+
+exports.sendWhatsAppPaymentReceipt = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Login required.");
+  const phone = normalizePhoneNumber(request.data.phoneNumber);
+  if (!phone) throw new HttpsError("invalid-argument", "Invalid phone.");
+  return sendTemplateMessage(phone, "paymentReceipt", request.data);
+});
+
+exports.sendWhatsAppMembershipActivation = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Login required.");
+  const phone = normalizePhoneNumber(request.data.phoneNumber);
+  if (!phone) throw new HttpsError("invalid-argument", "Invalid phone.");
+  return sendTemplateMessage(phone, "membershipActivation", request.data);
+});
+
+exports.sendWhatsAppMembershipExpiry = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Login required.");
+  const phone = normalizePhoneNumber(request.data.phoneNumber);
+  if (!phone) throw new HttpsError("invalid-argument", "Invalid phone.");
+  return sendTemplateMessage(phone, "membershipExpiry", request.data);
+});
+
+exports.sendWhatsAppSessionCancellation = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Login required.");
+  const phone = normalizePhoneNumber(request.data.phoneNumber);
+  if (!phone) throw new HttpsError("invalid-argument", "Invalid phone.");
+  return sendTemplateMessage(phone, "sessionCancellation", request.data);
+});
+
+exports.sendWhatsAppTournamentAnnouncement = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Login required.");
+  await assertRole(request.auth.uid, ["admin", "tournamentOrganizer"]);
+  const users = await db.collection("users").where("whatsappOptIn", "!=", false).get();
+  const phones = users.docs.map((u) => normalizePhoneNumber(u.data().phone)).filter(Boolean);
+  return broadcastTemplate(phones, "tournamentAnnouncement", request.data);
+});
+
+exports.sendWhatsAppPromotion = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Login required.");
+  await assertRole(request.auth.uid, ["admin", "facilityManager"]);
+  const { targetAudience, title, body, imageUrl, ctaUrl } = request.data;
+  let usersRef = db.collection("users").where("whatsappOptIn", "!=", false);
+  if (targetAudience === "members") usersRef = usersRef.where("membershipStatus", "==", "active");
+  else if (targetAudience === "guests") usersRef = usersRef.where("role", "==", "guest");
+  else if (targetAudience === "coaching") usersRef = usersRef.where("role", "==", "coachingMember");
+  const users = await usersRef.get();
+  const phones = users.docs.map((u) => normalizePhoneNumber(u.data().phone)).filter(Boolean);
+  await db.collection("whatsappCampaigns").add({
+    title, body, imageUrl: imageUrl || "", ctaUrl: ctaUrl || "",
+    targetAudience, recipientCount: phones.length, sentBy: request.auth.uid,
+    createdAt: FieldValue.serverTimestamp(),
+  });
+  return broadcastTemplate(phones, "promotion", { title, body, imageUrl });
+});
+
+exports.updateWhatsAppOptIn = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Login required.");
+  await db.collection("users").doc(request.auth.uid).update({
+    whatsappOptIn: request.data.optIn === true,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+  return { success: true };
+});
+
+// ════════════════════════════════════════════════════════════════
+// SCHEDULED — Booking Reminders (every 15 min)
+// ════════════════════════════════════════════════════════════════
+
+exports.sendBookingReminders = onSchedule(
+  { schedule: "*/15 * * * *", timeZone: "Asia/Kolkata" },
+  async () => {
+    const now = new Date();
+    const later = new Date(now.getTime() + 3600000);
+    const todayStr = now.toISOString().split("T")[0];
+    const targetTime = `${later.getHours()}:00`;
+    const bookings = await db.collection("bookings")
+      .where("date", "==", todayStr).where("startTime", "==", targetTime)
+      .where("status", "==", "upcoming").get();
+    for (const doc of bookings.docs) {
+      const d = doc.data();
+      const uDoc = await db.collection("users").doc(d.userId).get();
+      if (!uDoc.exists) continue;
+      const fDoc = await db.collection("facilities").doc(d.facilityId).get();
+      const fName = fDoc.exists ? fDoc.data().name : d.facilityId;
+      await sendNotification(d.userId, "booking", "Upcoming Booking",
+        `${fName} at ${d.startTime} today`, {
+          whatsappTemplate: "bookingReminder",
+          whatsappParams: { customerName: uDoc.data().name, facilityName: fName, date: d.date, time: d.startTime },
+        });
+    }
+    console.log(`[Reminders] ${bookings.size} reminders sent.`);
+  }
+);
+
+// ════════════════════════════════════════════════════════════════
+// SCHEDULED — Membership Expiry Alerts (daily 9 AM IST)
+// ════════════════════════════════════════════════════════════════
+
+exports.sendMembershipExpiryAlerts = onSchedule(
+  { schedule: "0 9 * * *", timeZone: "Asia/Kolkata" },
+  async () => {
+    let total = 0;
+    for (const days of [7, 3, 1]) {
+      const target = new Date(Date.now() + days * 86400000).toISOString().split("T")[0];
+      const mems = await db.collection("memberships")
+        .where("expiryDate", "==", target).where("status", "==", "active").get();
+      for (const doc of mems.docs) {
+        const d = doc.data();
+        const uDoc = await db.collection("users").doc(doc.id).get();
+        if (!uDoc.exists) continue;
+        await sendNotification(doc.id, "membership", "Membership Expiring",
+          `Your ${d.type} plan expires in ${days} day${days > 1 ? "s" : ""}`, {
+            whatsappTemplate: "membershipExpiry",
+            whatsappParams: { customerName: uDoc.data().name, planName: d.type, daysRemaining: days },
+          });
+        total++;
+      }
+    }
+    console.log(`[Membership] ${total} expiry alerts sent.`);
+  }
+);
+

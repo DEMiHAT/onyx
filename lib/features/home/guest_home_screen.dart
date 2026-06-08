@@ -9,7 +9,7 @@ import '../facility/facility_detail_screen.dart';
 import '../bookings/court_booking_screen.dart';
 import '../bookings/turf_booking_screen.dart';
 import '../bookings/nets_booking_screen.dart';
-import '../queue/queue_screen.dart';
+
 import '../notifications/notifications_screen.dart';
 import '../membership/membership_payment_screen.dart';
 
@@ -114,10 +114,7 @@ class GuestHomeScreen extends StatelessWidget {
                         Expanded(flex: 3, child: Text(f.shortName, style: AppTypography.titleSmall)),
                         Expanded(flex: 2, child: StatusChip(status: f.status, compact: true)),
                         SizedBox(width: 60, child: Text(isAvail ? 'Book' : '${f.timeRemainingMinutes}m', style: AppTypography.bodySmall.copyWith(color: isAvail ? AppColors.success : AppColors.textSecondary), textAlign: TextAlign.right)),
-                        if (f.queueLength > 0) ...[
-                          const SizedBox(width: 6),
-                          Container(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2), decoration: BoxDecoration(color: AppColors.warningMuted, borderRadius: BorderRadius.circular(3)), child: Text('Q${f.queueLength}', style: AppTypography.labelSmall.copyWith(color: AppColors.warning, fontSize: 9))),
-                        ],
+
                       ]),
                     ),
                   );
@@ -137,8 +134,7 @@ class GuestHomeScreen extends StatelessWidget {
                 _QuickAction(icon: Icons.sports_cricket_rounded, label: 'Turf', color: AppColors.cricketTurf, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TurfBookingScreen()))),
                 const SizedBox(width: 8),
                 _QuickAction(icon: Icons.sports_baseball_rounded, label: 'Nets', color: AppColors.cricketNets, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NetsBookingScreen()))),
-                const SizedBox(width: 8),
-                _QuickAction(icon: Icons.queue_rounded, label: 'Queue', color: AppColors.warning, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const QueueScreen()))),
+
               ]),
             ),
           ),
