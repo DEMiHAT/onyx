@@ -17,7 +17,7 @@ class PaymentService {
   final _functions = FirebaseFunctions.instance;
 
   // Razorpay test key — replace with live key for production
-  static const _razorpayKey = 'rzp_test_PLACEHOLDER';
+  static const _razorpayKey = 'rzp_test_Sz36ccB15HWvZ3';
 
   Function(String bookingId, String paymentId)? _onSuccess;
   Function(String error)? _onFailure;
