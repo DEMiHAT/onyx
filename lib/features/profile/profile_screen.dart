@@ -380,12 +380,12 @@ class _RoleBadge extends StatelessWidget {
 }
 
 class _LevelBadge extends StatelessWidget {
-  final ExperienceLevel level;
+  final String level;
   const _LevelBadge({required this.level});
 
   @override
   Widget build(BuildContext context) {
-    final label = '${level.name[0].toUpperCase()}${level.name.substring(1)}';
+    final label = level.isNotEmpty ? '${level[0].toUpperCase()}${level.substring(1)}' : '';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
